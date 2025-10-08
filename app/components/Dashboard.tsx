@@ -1,0 +1,282 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import {
+  User,
+  Package,
+  CreditCard,
+  Settings,
+  ShoppingBag,
+  BarChart,
+  Store,
+  ShoppingCart,
+} from "lucide-react";
+import {
+  ResponsiveContainer,
+  BarChart as ReBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from "recharts";
+import Profile from "./Profile";
+import Product from "./Product";
+import Shop from "./Shop";
+import OrdersPage from "./Order";
+import Order from "./Order";
+
+// ✅ Custom Sidebar Toggle Icon
+function SidebarToggleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect x="3" y="3" width="18" height="18" rx="4" />
+      <path d="M9 3v18" />
+    </svg>
+  );
+}
+
+export default function Dashboard() {
+  const [vendor, setVendor] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const router = useRouter();
+
+  const chartData =
+    vendor?.products?.map((p: any, i: number) => ({
+      name: p.name || `Product ${i + 1}`,
+      sales: p.sales || Math.floor(Math.random() * 100),
+    })) || [];
+
+  useEffect(() => {
+    const fetchVendor = async () => {
+      try {
+        const res = await fetch("/api/vendor/me", { credentials: "include" });
+
+        if (res.status === 401) {
+          router.push("/login?role=vendor");
+          return;
+        }
+
+        if (res.ok) {
+          const data = await res.json();
+          setVendor(data);
+        }
+      } catch (err) {
+        console.error("Failed to load vendor data", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchVendor();
+  }, [router]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <motion.div className="w-16 h-16 border-4 border-blue-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!vendor) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-50">
+        <p className="text-red-600 font-semibold">
+          Unable to load vendor data.
+        </p>
+      </div>
+    );
+  }
+
+  const sidebarButton = (icon: any, label: string, tab: string) => (
+    <button
+      onClick={() => {
+        setActiveTab(tab);
+        setSidebarOpen(false);
+      }}
+      className={`flex items-center gap-3 p-3 w-full rounded-xl transition text-sm font-medium ${
+        activeTab === tab
+          ? "bg-blue-100 text-blue-700 font-semibold"
+          : "text-gray-700 hover:bg-blue-50"
+      }`}
+    >
+      {icon} {label}
+    </button>
+  );
+
+  return (
+    <div className="min-h-screen flex bg-gray-50">
+      {/* ✅ Mobile Sidebar Toggle */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="fixed top-4 left-4 z-50 md:hidden bg-blue-600 p-2 rounded-lg shadow-lg text-white"
+      >
+        <motion.div
+          initial={false}
+          animate={{ rotate: sidebarOpen ? 90 : 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <SidebarToggleIcon className="w-6 h-6" />
+        </motion.div>
+      </button>
+
+      {/* Sidebar */}
+      <aside
+        className={`fixed md:static top-0 left-0 h-full w-72 bg-white rounded-r-2xl p-6 flex flex-col justify-between shadow-lg z-40 transform transition-transform duration-300
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+      >
+        <div>
+          <h2 className="text-2xl font-bold text-blue-700 mb-10">
+            Vendor Panel
+          </h2>
+          <nav className="space-y-3">
+            {sidebarButton(<BarChart className="w-5 h-5" />, "Dashboard", "dashboard")}
+            {sidebarButton(<Package className="w-5 h-5" />, "Products", "products")}
+            {sidebarButton(<Package className="w-5 h-5" />, "Orders", "orders")}
+            {sidebarButton(<CreditCard className="w-5 h-5" />, "Payments", "payments")}
+            {sidebarButton(<User className="w-5 h-5" />, "Profile", "profile")}
+            {sidebarButton(<Store className="w-5 h-5" />, "Shop", "shop")}
+            {sidebarButton(<Settings className="w-5 h-5" />, "Settings", "settings")}
+          </nav>
+        </div>
+
+        {/* Subscription Plan */}
+        <div className="bg-blue-50 text-blue-700 p-4 rounded-xl shadow mt-8">
+          <p className="text-sm font-medium">Plan:</p>
+          <p className="text-lg font-bold">
+            {vendor.subscription?.plan || "Free"}
+          </p>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 p-6 md:p-10">
+        {/* Sticky Header with Marketplace button */}
+        <header className="flex justify-between items-center mb-8 sticky top-0 bg-gray-50 z-30 pb-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
+              Welcome, <span className="text-blue-700">{vendor.name}</span>
+            </h1>
+            <p className="text-gray-500 text-sm mt-1">
+              Manage your shop, payments, and performance
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Go to Marketplace Button */}
+            <button
+              onClick={() => router.push("/marketplace")}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium shadow hover:bg-blue-700 transition text-sm"
+            >
+              <ShoppingCart className="w-5 h-5" />
+              <span className="hidden sm:inline">Go to Marketplace</span>
+            </button>
+
+            <ShoppingBag className="w-8 h-8 md:w-10 md:h-10 text-blue-600" />
+          </div>
+        </header>
+
+        {/* Dashboard Tab */}
+        {activeTab === "dashboard" && (
+          <>
+            {vendor.subscription?.plan === "free" && (
+              <div className="bg-blue-100 border-l-4 border-blue-600 text-blue-700 p-4 rounded-xl mb-8 shadow text-sm">
+                🎉 You are on a <strong>1-month free trial</strong> as an early vendor!
+              </div>
+            )}
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-10">
+              <div className="bg-white rounded-2xl shadow p-4 md:p-6 flex flex-col gap-1 hover:shadow-lg transition">
+                <BarChart className="w-6 h-6 text-blue-600 mb-1" />
+                <h3 className="text-xs md:text-sm font-medium text-gray-500">Products</h3>
+                <p className="text-lg md:text-2xl font-bold text-gray-800">
+                  {vendor.products?.length || 0}
+                </p>
+              </div>
+              <div className="bg-white rounded-2xl shadow p-4 md:p-6 flex flex-col gap-1 hover:shadow-lg transition">
+                <CreditCard className="w-6 h-6 text-green-600 mb-1" />
+                <h3 className="text-xs md:text-sm font-medium text-gray-500">Total Sales</h3>
+                <p className="text-lg md:text-2xl font-bold text-gray-800">Ksh.0</p>
+              </div>
+              <div className="bg-white rounded-2xl shadow p-4 md:p-6 flex flex-col gap-1 hover:shadow-lg transition">
+                <User className="w-6 h-6 text-purple-600 mb-1" />
+                <h3 className="text-xs md:text-sm font-medium text-gray-500">Active Subs</h3>
+                <p className="text-lg md:text-2xl font-bold text-gray-800">0</p>
+              </div>
+              <div className="bg-white rounded-2xl shadow p-4 md:p-6 flex flex-col gap-1 hover:shadow-lg transition">
+                <Package className="w-6 h-6 text-orange-600 mb-1" />
+                <h3 className="text-xs md:text-sm font-medium text-gray-500">Orders</h3>
+                <p className="text-lg md:text-2xl font-bold text-gray-800">0</p>
+              </div>
+            </div>
+
+            {/* Chart */}
+            <div className="bg-white rounded-2xl shadow p-6 mb-10">
+              <h2 className="text-lg md:text-xl font-semibold mb-4">Product Sales</h2>
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <ReBarChart data={chartData}>
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="sales" fill="#3b82f6" />
+                  </ReBarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-gray-500 text-sm">No sales data yet.</p>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Products Tab */}
+        {activeTab === "products" && <Product />}
+
+        {/* Orders Tab */}
+        {activeTab === "orders" && <Order />}
+        {/* Payments Tab */}
+        {activeTab === "payments" && (
+          <div className="bg-white rounded-2xl shadow p-6">
+            <h2 className="text-lg font-semibold mb-4">Payments</h2>
+            <p className="text-gray-500 text-sm">Payment history coming soon...</p>
+          </div>
+        )}
+
+        {/* Profile Tab */}
+        {activeTab === "profile" && <Profile />}
+
+        {/* Shop Tab */}
+        {activeTab === "shop" && <Shop />}
+
+        {/* Settings Tab */}
+        {activeTab === "settings" && (
+          <div className="bg-white rounded-2xl shadow p-6">
+            <h2 className="text-lg font-semibold mb-4">Settings</h2>
+            <p className="text-gray-500 text-sm">Vendor settings coming soon...</p>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
