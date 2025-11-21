@@ -1,13 +1,14 @@
 import mongoose, { Schema, models } from "mongoose";
 
 const itemSchema = new Schema({
-  productId: { type: String, required: true },
-  vendorId: { type: String, required: true }, // ✅ keep required for multi-vendor
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: "MarketplaceProduct", required: true },
+  vendorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   name: { type: String, required: true },
   price: { type: Number, required: true },
   image: { type: String },
   quantity: { type: Number, default: 1 },
 });
+
 
 const cartSchema = new Schema(
   {
@@ -20,6 +21,7 @@ const cartSchema = new Schema(
 
 const Cart = models.Cart || mongoose.model("Cart", cartSchema);
 export default Cart;
+
 
 
 

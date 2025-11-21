@@ -34,10 +34,9 @@ export default function Signup() {
     if (res.ok) {
       toast.success("✅ Signup successful!", { id: "signup-process" });
 
-      // Redirect based on role
+      // Redirect to login page
       setTimeout(() => {
-        if (role === "vendor") router.push("/dashboard");
-        else router.push("/marketplace");
+        router.push(`/login?role=${role}`);
       }, 1200);
     } else {
       toast.error(data.message || "❌ Signup failed", { id: "signup-process" });
@@ -141,6 +140,7 @@ export default function Signup() {
     </div>
   );
 }
+
 
 
 

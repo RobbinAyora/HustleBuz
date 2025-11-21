@@ -3,21 +3,34 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { FaStore, FaCopy } from "react-icons/fa";
+import Skeleton from "react-loading-skeleton";
+import "react-loading-skeleton/dist/skeleton.css";
+import toast, { Toaster } from "react-hot-toast";
 
 interface Shop {
   name: string;
   contact: string;
   logo?: string;
-  themeColor: string;
   link?: string;
+  theme: {
+    primaryColor: string;
+    secondaryColor: string;
+    accentColor: string;
+    layout: "classic" | "modern" | "minimal";
+  };
 }
 
 const DEFAULT_SHOP: Shop = {
   name: "",
   contact: "",
   logo: "",
-  themeColor: "#1D4ED8",
   link: "",
+  theme: {
+    primaryColor: "#1D4ED8",
+    secondaryColor: "#FFFFFF",
+    accentColor: "#FBBF24",
+    layout: "classic",
+  },
 };
 
 export default function Shop() {
@@ -25,21 +38,31 @@ export default function Shop() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const fullShopLink = shop.link ? `${window.location.origin}/shop/${shop.link}` : "";
+
+  // Fetch vendor shop
   useEffect(() => {
     const fetchShop = async () => {
       try {
-        const res = await fetch("/api/vendor/shop");
+        const res = await fetch(`/api/vendor/shop`, { credentials: "include" });
         if (!res.ok) throw new Error("Failed to fetch shop");
         const data = await res.json();
+        const themeData = data.shop?.theme || DEFAULT_SHOP.theme;
+
         setShop({
-          name: data.name || "",
-          contact: data.contact || "",
-          logo: data.logo || "",
-          themeColor: data.themeColor || "#1D4ED8",
-          link: data.link || "",
+          name: data.shop?.name || "",
+          contact: data.shop?.contact || "",
+          logo: data.shop?.logo || "",
+          link: data.shop?.link || "",
+          theme: {
+            primaryColor: themeData.primaryColor || "#1D4ED8",
+            secondaryColor: themeData.secondaryColor || "#FFFFFF",
+            accentColor: themeData.accentColor || "#FBBF24",
+            layout: themeData.layout || "classic",
+          },
         });
       } catch (err) {
-        console.error(err);
+        toast.error("Failed to load shop data");
       } finally {
         setLoading(false);
       }
@@ -66,79 +89,89 @@ export default function Shop() {
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onloadend = () =>
       setShop((prev) => ({ ...prev, logo: reader.result as string }));
-    };
     reader.readAsDataURL(file);
   };
 
   const handleThemeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setShop((prev) => ({ ...prev, themeColor: e.target.value || "#1D4ED8" }));
+    const color = e.target.value;
+    setShop((prev) => ({
+      ...prev,
+      theme: { ...prev.theme, primaryColor: color },
+    }));
   };
 
-  const handleCopyLink = () => {
-    if (shop.link) {
-      navigator.clipboard.writeText(`${window.location.origin}/shop/${shop.link}`);
-      alert("Shop link copied to clipboard!");
-    }
-  };
-
+  // Save shop
   const handleSave = async () => {
     setSaving(true);
+    toast.loading("Saving shop...", { id: "save" });
+
     try {
       const res = await fetch("/api/vendor/shop", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(shop),
       });
 
-      if (!res.ok) throw new Error("Save failed");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Save failed");
 
-      const updated = await res.json();
+      setShop((prev) => ({
+        ...prev,
+        name: data.shop?.name || prev.name,
+        contact: data.shop?.contact || prev.contact,
+        logo: data.shop?.logo || prev.logo,
+        link: data.shop?.link || prev.link,
+        theme: { ...prev.theme, ...(data.shop?.theme || {}) },
+      }));
 
-      setShop({
-        name: updated.name || "",
-        contact: updated.contact || "",
-        logo: updated.logo || "",
-        themeColor: updated.themeColor || "#1D4ED8",
-        link: updated.link || "",
-      });
-
-      alert("Shop saved successfully!");
-    } catch (err) {
-      alert("Error saving shop");
-      console.error(err);
+      toast.success("Shop saved successfully!", { id: "save" });
+    } catch (err: any) {
+      toast.error("Error saving shop: " + err.message, { id: "save" });
     } finally {
       setSaving(false);
     }
   };
 
-  const visitShop = () => {
-    if (shop.link) {
-      window.open(`${window.location.origin}/shop/${shop.link}`, "_blank");
-    } else {
-      alert("Please save your shop first!");
+  const handleCopyLink = () => {
+    if (fullShopLink) {
+      navigator.clipboard.writeText(fullShopLink);
+      toast.success(`Shop link copied: ${fullShopLink}`);
     }
   };
 
-  if (loading) return <div className="text-center py-10">Loading shop...</div>;
+  const visitShop = () => {
+    if (fullShopLink) {
+      toast.loading("Redirecting to your shop...", { id: "visit" });
+      setTimeout(() => {
+        toast.dismiss("visit");
+        window.open(fullShopLink, "_blank");
+      }, 800);
+    } else {
+      toast.error("Please save your shop first!");
+    }
+  };
 
   return (
     <motion.div
+      className="max-w-4xl mx-auto p-8 bg-white rounded-xl shadow-lg mt-12"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-4xl mx-auto p-8 bg-white rounded-xl shadow-lg mt-12"
     >
+      <Toaster />
+
       <h2 className="text-3xl font-bold text-center mb-8 flex items-center justify-center gap-3 text-blue-700">
-        <FaStore size={36} />
-        Setup Your Shop
+        <FaStore size={36} /> Setup Your Shop
       </h2>
 
       {/* Logo */}
       <div className="flex flex-col items-center mb-8">
-        {shop.logo ? (
+        {loading ? (
+          <Skeleton circle height={144} width={144} />
+        ) : shop.logo ? (
           <img
             src={shop.logo}
             alt="Shop Logo"
@@ -149,93 +182,121 @@ export default function Shop() {
             No Logo
           </div>
         )}
-        <label className="cursor-pointer text-blue-600 hover:underline" htmlFor="logo-upload">
-          Upload Logo
-        </label>
-        <input
-          id="logo-upload"
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleLogoUpload}
-        />
+
+        {!loading && (
+          <>
+            <label htmlFor="logo-upload" className="cursor-pointer text-blue-600 hover:underline">
+              Upload Logo
+            </label>
+            <input
+              id="logo-upload"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleLogoUpload}
+            />
+          </>
+        )}
       </div>
 
-      {/* Form Inputs */}
+      {/* Inputs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-        <input
-          type="text"
-          name="name"
-          placeholder="Shop Name"
-          value={shop.name}
-          onChange={handleChange}
-          className="border p-3 rounded-lg w-full"
-          aria-label="Shop Name"
-        />
-        <input
-          type="text"
-          name="contact"
-          placeholder="Contact Info"
-          value={shop.contact}
-          onChange={handleChange}
-          className="border p-3 rounded-lg w-full"
-          aria-label="Contact Info"
-        />
-
-        {/* Shop link & copy */}
-        <div className="flex items-center space-x-2">
+        {loading ? (
+          <Skeleton height={50} />
+        ) : (
           <input
             type="text"
-            value={shop.link || ""}
-            readOnly
-            className="border p-3 w-full rounded-lg bg-gray-100"
-            aria-label="Shop Link"
+            name="name"
+            placeholder="Shop Name"
+            value={shop.name}
+            onChange={handleChange}
+            className="border p-3 rounded-lg w-full"
           />
-          <button
-            onClick={handleCopyLink}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-blue-700 transition"
-            aria-label="Copy Shop Link"
-            type="button"
-          >
-            <FaCopy className="mr-1" />
-            Copy
-          </button>
+        )}
+
+        {loading ? (
+          <Skeleton height={50} />
+        ) : (
+          <input
+            type="text"
+            name="contact"
+            placeholder="Contact Info"
+            value={shop.contact}
+            onChange={handleChange}
+            className="border p-3 rounded-lg w-full"
+          />
+        )}
+
+        <div>
+          {loading ? (
+            <Skeleton height={50} />
+          ) : (
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                value={fullShopLink}
+                readOnly
+                className="border p-3 w-full rounded-lg bg-gray-100"
+              />
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-blue-700 transition"
+              >
+                <FaCopy className="mr-1" /> Copy
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Theme color picker */}
-        <div className="sm:col-span-2 flex items-center gap-4">
-          <input
-            type="color"
-            value={shop.themeColor || "#1D4ED8"}
-            onChange={handleThemeChange}
-            className="w-12 h-12 cursor-pointer border-none p-0"
-            aria-label="Theme Color Picker"
-          />
-          <span className="text-gray-700 font-semibold">{shop.themeColor}</span>
-        </div>
+        {/* Theme Picker */}
+        {loading ? (
+          <Skeleton height={50} />
+        ) : (
+          <div className="sm:col-span-2 flex items-center gap-4">
+            <input
+              type="color"
+              value={shop.theme.primaryColor}
+              onChange={handleThemeChange}
+              className="w-12 h-12 cursor-pointer border-none p-0"
+            />
+            <span className="text-gray-700 font-semibold">{shop.theme.primaryColor}</span>
+          </div>
+        )}
       </div>
 
       {/* Buttons */}
       <div className="flex gap-4">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex-1 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition disabled:opacity-60"
-          type="button"
-        >
-          {saving ? "Saving..." : "Save Shop"}
-        </button>
-        <button
-          onClick={visitShop}
-          className="flex-1 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
-          type="button"
-        >
-          Visit Shop
-        </button>
+        {loading ? (
+          <Skeleton height={50} className="flex-1" />
+        ) : (
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition disabled:opacity-60"
+          >
+            {saving ? "Saving..." : "Save Shop"}
+          </button>
+        )}
+
+        {loading ? (
+          <Skeleton height={50} className="flex-1" />
+        ) : (
+          <button
+            onClick={visitShop}
+            className="flex-1 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
+          >
+            Visit Shop
+          </button>
+        )}
       </div>
     </motion.div>
   );
 }
+
+
+
+
 
 
 

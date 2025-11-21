@@ -11,50 +11,67 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const role = searchParams.get("role") || "buyer";
+  const nextUrl = searchParams.get("redirect") || ""; // ✅ Capture the next URL
 
   const handleLogin = async () => {
-    // Show initial toast
-    if (role === "vendor") {
-      toast.loading("🔍 Checking subscription...", { id: "login-process" });
-    } else {
-      toast.loading("🔍 Logging in...", { id: "login-process" });
+    if (!email || !password) {
+      toast.error("Please enter email and password");
+      return;
     }
 
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
+    toast.loading("🔍 Logging in...", { id: "login-process" });
 
-    const data = await res.json();
+    try {
+      const res = await fetch(`/api/auth/login?next=${encodeURIComponent(nextUrl)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (res.ok) {
-      toast.success("✅ Login successful!", { id: "login-process" });
+      const data = await res.json();
 
-      if (data.role === "vendor") {
-        const subRes = await fetch("/api/subscription/check", {
-          credentials: "include",
-        });
-        const sub = await subRes.json();
+      if (res.ok) {
+        toast.success("✅ Login successful!", { id: "login-process" });
 
-        if (!sub.active) {
-          router.push("/subscriptions");
+        // ✅ If there's a next URL, redirect there first
+        if (nextUrl) {
+          router.push(nextUrl);
+          return;
+        }
+
+        // ✅ Role-based redirect with subscription check
+        if (data.role === "vendor") {
+          console.log("👤 Vendor login success, checking subscription...");
+          const subRes = await fetch("/api/subscription/check", { credentials: "include" });
+          const subData = await subRes.json();
+
+          console.log("📦 Subscription check result:", subData);
+
+          // ✅ Decide redirect based on subscription status
+          if (subData.paid || subData.trialActive) {
+            console.log("✅ Active plan detected → Redirecting to dashboard");
+            router.push("/dashboard");
+          } else {
+            console.log("🚫 No active plan → Redirecting to subscriptions");
+            router.push("/subscriptions");
+          }
         } else {
-          // ✅ Default vendors to dashboard, but they can still go to marketplace later
-          router.push("/dashboard");
+          console.log("🛍️ Buyer login → Redirecting to marketplace");
+          router.push("/marketplace");
         }
       } else {
-        router.push("/marketplace");
+        toast.error(data.message || "❌ Login failed", { id: "login-process" });
       }
-    } else {
-      toast.error(data.message || "❌ Login failed", { id: "login-process" });
+    } catch (err) {
+      console.error("❌ Error during login:", err);
+      toast.error("❌ An error occurred during login", { id: "login-process" });
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-50 to-white px-4">
-      {/* Toast container */}
       <Toaster position="top-center" reverseOrder={false} />
 
       <motion.div
@@ -119,7 +136,7 @@ export default function Login() {
         <p className="text-center text-gray-600">
           Don’t have an account?{" "}
           <a
-            href={`/signup?role=${role}`}
+            href={`/signup?role=${role}${nextUrl ? `&next=${encodeURIComponent(nextUrl)}` : ""}`}
             className="text-blue-600 font-semibold hover:underline"
           >
             Sign up here
@@ -129,6 +146,8 @@ export default function Login() {
     </div>
   );
 }
+
+
 
 
 

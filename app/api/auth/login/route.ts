@@ -6,6 +6,9 @@ import { signToken } from "@/app/lib/auth";
 
 export async function POST(req: Request) {
   await connectDB();
+  const url = new URL(req.url);
+  const nextUrl = url.searchParams.get("next") || "/"; // default to home
+
   const { email, password } = await req.json();
 
   const user = await User.findOne({ email });
@@ -20,13 +23,13 @@ export async function POST(req: Request) {
   const token = signToken({ id: user._id, role: user.role });
 
   // ✅ Prepare response and set cookie
-  const res = NextResponse.json({ message: "Login success", role: user.role });
+  const res = NextResponse.json({ message: "Login success", role: user.role, next: nextUrl });
 
   res.cookies.set("token", token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production", // ✅ Only secure in production
-    sameSite: "lax", // ✅ So cookie works with client-side navigation
-    path: "/", // ✅ Accessible across the whole app
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
     maxAge: 7 * 24 * 60 * 60, // 7 days
   });
 

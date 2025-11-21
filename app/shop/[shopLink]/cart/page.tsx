@@ -1,203 +1,222 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { Trash2, Plus, Minus } from "lucide-react";
-import toast, { Toaster } from "react-hot-toast";
+import { useParams, useRouter } from "next/navigation";
+import { ShoppingCart, Trash2 } from "lucide-react";
+import toast from "react-hot-toast";
 
 interface CartItem {
-  _id: string;
-  productId: {
-    _id: string;
-    name: string;
-    price: number;
-    images?: string[];
-  };
-  quantity: number;
+  _id?: string;
+  productId: string;
+  name: string;
   price: number;
   image?: string;
-  name?: string;
+  quantity: number;
+  vendorId?: string;
 }
 
 interface Cart {
+  _id: string;
   items: CartItem[];
   totalPrice: number;
 }
 
-export default function ShopCartPage() {
+interface Shop {
+  _id: string;
+  name: string;
+  theme?: {
+    primaryColor?: string;
+  };
+}
+
+export default function CartPage() {
   const { shopLink } = useParams();
+  const router = useRouter();
+  const [shop, setShop] = useState<Shop | null>(null);
+  const [shopId, setShopId] = useState<string | null>(null);
   const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Fetch the current shop's cart
-  const fetchCart = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/shop/${shopLink}/cart`, {
-        method: "GET",
-        credentials: "include",
-      });
-
-      if (!res.ok) {
-        toast.error("Failed to fetch cart");
-        return;
+  // ✅ Check authentication
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (!res.ok) {
+          router.push(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+        }
+      } catch (err) {
+        console.error("Auth check failed:", err);
+        router.push(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
       }
+    };
+    checkAuth();
+  }, [router]);
 
-      const data = await res.json();
-      setCart(data.items ? data : { items: [], totalPrice: 0 });
-    } catch (err) {
-      console.error(err);
-      toast.error("Error loading cart");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ✅ Fetch shop + cart
+  useEffect(() => {
+    const fetchCart = async () => {
+      try {
+        const shopRes = await fetch(`/api/public/shop/${shopLink}`);
+        if (!shopRes.ok) throw new Error("Failed to fetch shop details");
 
-  // ➕ Increment / ➖ Decrement item quantity
-  const updateQuantity = async (productId: string, newQuantity: number) => {
-    if (newQuantity < 1) return;
+        const { shop } = await shopRes.json();
+        if (!shop?._id) throw new Error("Shop not found");
+        setShop(shop);
+        setShopId(shop._id);
 
-    try {
-      const res = await fetch(`/api/shop/${shopLink}/cart`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId, quantity: newQuantity }),
-      });
+        const cartRes = await fetch(`/api/shop-cart/${shop._id}`, {
+          method: "GET",
+          credentials: "include",
+        });
 
-      if (!res.ok) throw new Error("Failed to update cart");
+        if (!cartRes.ok) {
+          setCart(null);
+          return;
+        }
 
-      // ✅ Update cart locally instead of re-fetching
-      setCart((prev) => {
-        if (!prev) return prev;
-        const updatedItems = prev.items.map((item) =>
-          item.productId._id === productId
-            ? { ...item, quantity: newQuantity }
-            : item
-        );
-        const totalPrice = updatedItems.reduce(
-          (sum, i) => sum + i.price * i.quantity,
-          0
-        );
-        return { items: updatedItems, totalPrice };
-      });
+        const data = await cartRes.json();
+        setCart(data);
+      } catch (err) {
+        console.error("Cart fetch error:", err);
+        toast.error("Failed to load cart");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-      toast.success("Cart updated");
-    } catch (err) {
-      console.error(err);
-      toast.error("Error updating cart");
-    }
-  };
+    if (shopLink) fetchCart();
+  }, [shopLink]);
 
-  // 🗑 Remove item from cart
+  // ✅ Remove item
   const removeItem = async (productId: string) => {
+    if (!cart || !shopId) return;
+
     try {
-      const res = await fetch(`/api/shop/${shopLink}/cart`, {
+      const res = await fetch(`/api/shop-cart/${shopId}`, {
         method: "DELETE",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ productId }),
       });
 
       if (!res.ok) throw new Error("Failed to remove item");
 
-      // ✅ Update cart locally instead of re-fetching
-      setCart((prev) => {
-        if (!prev) return prev;
-        const updatedItems = prev.items.filter(
-          (item) => item.productId._id !== productId
-        );
-        const totalPrice = updatedItems.reduce(
-          (sum, i) => sum + i.price * i.quantity,
-          0
-        );
-        return { items: updatedItems, totalPrice };
-      });
-
+      const updated = await res.json();
+      setCart(updated.cart || null);
       toast.success("Item removed");
     } catch (err) {
-      console.error(err);
-      toast.error("Error removing item");
+      console.error("Remove item error:", err);
+      toast.error("Failed to remove item");
     }
   };
 
-  useEffect(() => {
-    if (shopLink) fetchCart();
-  }, [shopLink]);
+  // ✅ Redirect to checkout
+  const handleCheckout = () => {
+    if (!shopId) return toast.error("Shop not found");
+    router.push(`/checkout?shopId=${shopId}`);
+  };
 
-  if (loading) return <p className="text-center mt-20">Loading cart...</p>;
+  const primaryColor = shop?.theme?.primaryColor || "#4F46E5";
+
+  if (loading)
+    return (
+      <div className="flex justify-center items-center h-[80vh] text-gray-500">
+        Loading cart...
+      </div>
+    );
+
   if (!cart || cart.items.length === 0)
-    return <p className="text-center mt-20">Your cart is empty.</p>;
+    return (
+      <div className="flex flex-col justify-center items-center h-[80vh] text-gray-500">
+        <ShoppingCart size={48} className="mb-4" style={{ color: primaryColor }} />
+        <p>Your cart is empty.</p>
+      </div>
+    );
 
   return (
-    <div className="max-w-3xl mx-auto mt-10 px-4">
-      <Toaster position="top-right" />
-      <h1 className="text-2xl font-semibold mb-6 text-center">
-        Your Cart ({shopLink})
-      </h1>
+    <div className="max-w-3xl mx-auto p-6">
+      <h2 className="text-2xl font-semibold mb-4" style={{ color: primaryColor }}>
+        Your Cart
+      </h2>
 
-      <div className="bg-white shadow-md rounded-xl p-4 space-y-4">
-        {cart.items.map((item) => (
+      <div className="space-y-4">
+        {cart.items.map((item, index) => (
           <div
-            key={item._id}
-            className="flex items-center justify-between border-b pb-4"
+            key={item._id || `${item.productId}-${index}`}
+            className="flex justify-between items-center bg-white p-4 rounded-lg shadow"
+            style={{ border: `1px solid ${primaryColor}30` }}
           >
-            <div className="flex items-center space-x-4">
-              <img
-                src={item.image || item.productId?.images?.[0] || "/placeholder.png"}
-                alt={item.name || item.productId?.name}
-                className="w-16 h-16 object-cover rounded-lg"
-              />
+            <div className="flex items-center gap-4">
+              {item.image && (
+                <img
+                  src={item.image}
+                  alt={item.name}
+                  className="w-16 h-16 rounded object-cover"
+                  style={{ borderColor: `${primaryColor}50` }}
+                />
+              )}
               <div>
-                <h2 className="font-medium">
-                  {item.name || item.productId?.name}
-                </h2>
-                <p className="text-sm text-gray-500">
-                  ${item.price?.toFixed(2)}
+                <p className="font-medium" style={{ color: primaryColor }}>
+                  {item.name}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {item.quantity} × KES {item.price.toLocaleString()}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() =>
-                  updateQuantity(item.productId._id, item.quantity - 1)
-                }
-                className="p-2 bg-gray-100 rounded hover:bg-gray-200"
-              >
-                <Minus size={14} />
-              </button>
-              <span>{item.quantity}</span>
-              <button
-                onClick={() =>
-                  updateQuantity(item.productId._id, item.quantity + 1)
-                }
-                className="p-2 bg-gray-100 rounded hover:bg-gray-200"
-              >
-                <Plus size={14} />
-              </button>
-              <button
-                onClick={() => removeItem(item.productId._id)}
-                className="p-2 text-red-500 hover:bg-red-50 rounded"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
+            <button
+              onClick={() => removeItem(item.productId)}
+              className="text-white p-2 rounded hover:opacity-90 transition"
+              style={{ backgroundColor: primaryColor }}
+            >
+              <Trash2 size={20} />
+            </button>
           </div>
         ))}
+      </div>
 
-        <div className="flex justify-between pt-4">
-          <p className="font-semibold">Total:</p>
-          <p className="font-semibold">${cart.totalPrice.toFixed(2)}</p>
-        </div>
-
-        <button className="w-full bg-blue-600 text-white py-2 mt-4 rounded-lg hover:bg-blue-700">
-          Proceed to Checkout
+      <div className="mt-6 flex justify-between items-center">
+        <p className="text-xl font-semibold" style={{ color: primaryColor }}>
+          Total: KES {cart.totalPrice.toLocaleString()}
+        </p>
+        <button
+          onClick={handleCheckout}
+          className="text-white px-4 py-2 rounded-lg hover:opacity-90 transition"
+          style={{ backgroundColor: primaryColor }}
+        >
+          Checkout
         </button>
       </div>
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+           
+
+
+
+
+
+
+
+
+
+
+
 
 
 

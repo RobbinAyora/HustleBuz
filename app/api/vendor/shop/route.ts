@@ -1,98 +1,104 @@
-// app/api/vendor/shop/route.ts
 import { NextResponse } from "next/server";
 import { connectDB } from "@/app/lib/db";
 import Shop from "@/app/models/Shop";
 import mongoose from "mongoose";
-import { verify } from "jsonwebtoken";
-import { JWT_SECRET } from "@/app/lib/auth"; // Make sure JWT_SECRET is exported from here
+import jwt, { JwtPayload } from "jsonwebtoken";
+import { JWT_SECRET } from "@/app/lib/auth";
 
-interface JwtPayload {
-  id: string;
-  role?: string;
-  iat?: number;
-  exp?: number;
-}
-
-// Helper: verify token
-export const verifyToken = (token: string): JwtPayload | null => {
-  try {
-    const decoded = verify(token, JWT_SECRET) as JwtPayload | string;
-    if (typeof decoded === "string") return null;
-    return decoded;
-  } catch (err) {
-    console.error("JWT verification failed:", err);
-    return null;
-  }
-};
-
-// Helper: get vendor ID from JWT in cookies
-const getVendorIdFromRequest = (req: Request) => {
+/**
+ * Helper: Extract token from cookies
+ */
+function getTokenFromRequest(req: Request): string | null {
   const cookieHeader = req.headers.get("cookie");
   if (!cookieHeader) return null;
 
   const cookies = Object.fromEntries(
-    cookieHeader.split(";").map(cookie => {
-      const [name, ...rest] = cookie.trim().split("=");
+    cookieHeader.split(";").map((c) => {
+      const [name, ...rest] = c.trim().split("=");
       return [name, rest.join("=")];
     })
   );
 
-  const token = cookies["token"];
-  if (!token) return null;
+  return cookies["token"] || null;
+}
 
-  const decoded = verifyToken(token);
-  return decoded?.id || null;
-};
-
-// ------------------- GET Route -------------------
+/**
+ * GET: Fetch shop for the authenticated vendor
+ */
 export async function GET(req: Request) {
-  await connectDB();
-
   try {
-    const vendorIdStr = getVendorIdFromRequest(req);
-    if (!vendorIdStr) {
+    await connectDB();
+
+    const token = getTokenFromRequest(req);
+    if (!token) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    if (!mongoose.isValidObjectId(vendorIdStr)) {
-      return NextResponse.json({ message: "Invalid vendor ID" }, { status: 400 });
-    }
-    const vendorId = new mongoose.Types.ObjectId(vendorIdStr);
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const vendorId = decoded?.id;
 
-    const shop = await Shop.findOne({ owner: vendorId }).lean();
-    if (!shop)
+    if (!vendorId) {
       return NextResponse.json(
-        { message: "Shop not found for this vendor" },
-        { status: 404 }
+        { message: "Invalid token payload" },
+        { status: 401 }
       );
+    }
 
-    return NextResponse.json(shop);
-  } catch (error) {
-    console.error(error);
+    const vendorObjectId = new mongoose.Types.ObjectId(vendorId);
+
+    // ✅ Find or create shop for this user
+    let shop = await Shop.findOne({ owner: vendorObjectId });
+
+    if (!shop) {
+      shop = await Shop.create({
+        name: "My Shop",
+        contact: "0700000000",
+        link: `shop-${vendorId.toString().slice(-5)}`,
+        owner: vendorObjectId,
+        theme: {
+          primaryColor: "#1D4ED8",
+          secondaryColor: "#FFFFFF",
+          accentColor: "#FBBF24",
+          layout: "classic",
+        },
+      });
+      console.log("✅ Default shop created for vendor:", vendorId);
+    }
+
+    return NextResponse.json({ shop }, { status: 200 });
+  } catch (err: any) {
+    console.error("GET /api/vendor/shop error:", err.message);
     return NextResponse.json(
-      { message: "Internal server error" },
+      { message: "Internal server error", error: err.message },
       { status: 500 }
     );
   }
 }
 
-// ------------------- PUT Route -------------------
+/**
+ * PUT: Update shop for authenticated vendor
+ */
 export async function PUT(req: Request) {
-  await connectDB();
-
   try {
-    const vendorIdStr = getVendorIdFromRequest(req);
-    if (!vendorIdStr) {
+    await connectDB();
+
+    const token = getTokenFromRequest(req);
+    if (!token) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    if (!mongoose.isValidObjectId(vendorIdStr)) {
-      return NextResponse.json({ message: "Invalid vendor ID" }, { status: 400 });
-    }
-    const vendorId = new mongoose.Types.ObjectId(vendorIdStr);
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const vendorId = decoded?.id;
 
-    const body = await req.json();
-    const { name, contact, logo, themeColor, link } = body;
+    if (!vendorId) {
+      return NextResponse.json(
+        { message: "Invalid token payload" },
+        { status: 401 }
+      );
+    }
+
+    const vendorObjectId = new mongoose.Types.ObjectId(vendorId);
+    const { name, contact, logo, link, theme } = await req.json();
 
     if (!name || !contact || !link) {
       return NextResponse.json(
@@ -101,38 +107,40 @@ export async function PUT(req: Request) {
       );
     }
 
-    // Find existing shop for this vendor
-    let shop = await Shop.findOne({ owner: vendorId });
+    // 🚫 Prevent duplicate shop link
+    const existing = await Shop.findOne({
+      link,
+      owner: { $ne: vendorObjectId },
+    });
 
-    if (shop) {
-      shop.name = name;
-      shop.contact = contact;
-      shop.logo = logo;
-      shop.themeColor = themeColor || "#1D4ED8";
-      shop.link = link;
-      await shop.save();
-    } else {
-      shop = await Shop.create({
-        name,
-        contact,
-        logo,
-        themeColor: themeColor || "#1D4ED8",
-        link,
-        owner: vendorId,
-      });
+    if (existing) {
+      return NextResponse.json(
+        { message: "Shop link already taken." },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json(shop);
-  } catch (error) {
-    console.error(error);
+    const defaultTheme = {
+      primaryColor: "#1D4ED8",
+      secondaryColor: "#FFFFFF",
+      accentColor: "#FBBF24",
+      layout: "classic",
+    };
+
+    const mergedTheme = { ...defaultTheme, ...(theme || {}) };
+
+    const updatedShop = await Shop.findOneAndUpdate(
+      { owner: vendorObjectId },
+      { name, contact, logo, link, theme: mergedTheme },
+      { new: true, upsert: true }
+    );
+
+    return NextResponse.json({ shop: updatedShop }, { status: 200 });
+  } catch (err: any) {
+    console.error("PUT /api/vendor/shop error:", err);
     return NextResponse.json(
-      { message: "Failed to save shop" },
+      { message: "Failed to save shop", error: err.message },
       { status: 500 }
     );
   }
 }
-
-
-
-
-

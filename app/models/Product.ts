@@ -62,7 +62,7 @@ const ProductSchema: Schema = new Schema(
     vendor: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: false,
+      required: true,
     },
     categories: {
       type: [String],

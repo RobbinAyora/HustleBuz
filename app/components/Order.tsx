@@ -1,144 +1,147 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Package, ShoppingBag, Loader2 } from "lucide-react";
+import Skeleton from "react-loading-skeleton";
+import "react-loading-skeleton/dist/skeleton.css";
 
-interface OrderItem {
-  product: { name: string; price: number };
-  quantity: number;
-}
-
-interface Order {
-  _id: string;
-  total: number;
-  status: string;
-  createdAt: string;
-  items: OrderItem[];
-}
-
-export default function Orders() {
-  const [orders, setOrders] = useState<Order[]>([]);
+export default function VendorOrders() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [stats, setStats] = useState({ totalOrders: 0, totalSales: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const res = await fetch("/api/orders", {
-          credentials: "include", // ✅ include cookies
+        const res = await fetch("/api/orders/vendor", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          cache: "no-store",
         });
-
-        if (res.status === 401) {
-          setError("Unauthorized. Please log in again.");
-          setLoading(false);
-          return;
-        }
 
         const data = await res.json();
 
-        if (!data.success) {
-          setError(data.error || "Failed to fetch orders.");
-          setLoading(false);
-          return;
-        }
+        if (!res.ok) throw new Error(data.message || "Failed to load orders");
 
-        setOrders(data.orders || []);
+        setOrders(data.data.orders || []);
+        setStats(data.data.stats || { totalOrders: 0, totalSales: 0 });
       } catch (err: any) {
-        console.error(err);
-        setError("Something went wrong while fetching orders.");
+        setError(err.message);
       } finally {
         setLoading(false);
       }
     };
 
     fetchOrders();
+    const interval = setInterval(fetchOrders, 10000);
+    return () => clearInterval(interval);
   }, []);
 
-  // ✅ Loading state
-  if (loading)
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 text-blue-700">
-        <Loader2 className="animate-spin w-8 h-8 mb-3" />
-        <p>Loading your orders...</p>
-      </div>
-    );
-
-  // ✅ Error state
   if (error)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 text-red-600">
-        <p>{error}</p>
-      </div>
+      <p className="text-center text-red-500 mt-10 font-medium bg-red-50 p-3 rounded-xl shadow-sm w-fit mx-auto">
+        Error: {error}
+      </p>
     );
 
-  // ✅ Main UI
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 p-8">
-      <h1 className="text-3xl font-bold text-blue-700 mb-8 flex items-center gap-2">
-        <ShoppingBag className="w-7 h-7" /> Vendor Orders
+    <div className="p-6 bg-gradient-to-b from-blue-50 to-white min-h-screen">
+      <h1 className="text-3xl font-semibold mb-6 text-blue-700 text-center">
+        Vendor Orders
       </h1>
 
-      {orders.length === 0 ? (
-        <p className="text-blue-500 text-center mt-12">No orders yet.</p>
-      ) : (
-        <div className="grid gap-6">
-          {orders.map((order) => (
-            <div
-              key={order._id}
-              className="border border-blue-200 rounded-2xl p-5 bg-white hover:shadow-lg transition-shadow"
-            >
-              {/* Header */}
-              <div className="flex justify-between items-center mb-3">
-                <h2 className="text-lg font-semibold text-blue-800">
-                  Order #{order._id.slice(-6).toUpperCase()}
-                </h2>
-                <span
-                  className={`text-sm px-3 py-1 rounded-full font-medium ${
-                    order.status === "Pending"
-                      ? "bg-yellow-100 text-yellow-700"
-                      : order.status === "Completed"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-gray-100 text-gray-600"
-                  }`}
-                >
-                  {order.status}
-                </span>
-              </div>
-
-              {/* Items */}
-              <div className="space-y-2">
-                {order.items.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex justify-between items-center border-b border-blue-100 pb-2"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Package className="w-4 h-4 text-blue-500" />
-                      <span className="text-blue-800 font-medium">
-                        {item.product?.name || "Unnamed Product"}
-                      </span>
-                    </div>
-                    <span className="text-blue-700">
-                      {item.quantity} × Ksh. {item.product?.price ?? 0}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Total */}
-              <div className="mt-4 flex justify-between text-blue-700 font-semibold">
-                <span>Total:</span>
-                <span>Ksh. {order.total.toFixed(2)}</span>
-              </div>
-
-              <p className="text-sm text-blue-400 mt-2">
-                Placed on {new Date(order.createdAt).toLocaleDateString()}
+      {/* ====== Summary Cards ====== */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {loading ? (
+          <>
+            <Skeleton height={100} />
+            <Skeleton height={100} />
+          </>
+        ) : (
+          <>
+            <div className="bg-white border border-blue-100 shadow-md rounded-xl p-4 text-center hover:shadow-lg transition">
+              <h2 className="text-blue-500 text-sm font-medium">Total Orders</h2>
+              <p className="text-2xl font-bold text-blue-700 mt-2">
+                {stats.totalOrders}
               </p>
             </div>
-          ))}
-        </div>
-      )}
+            <div className="bg-white border border-blue-100 shadow-md rounded-xl p-4 text-center hover:shadow-lg transition">
+              <h2 className="text-blue-500 text-sm font-medium">Total Sales</h2>
+              <p className="text-2xl font-bold text-blue-700 mt-2">
+                KES {stats.totalSales ? stats.totalSales.toLocaleString() : '0'}
+
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ====== Orders Table ====== */}
+      <div className="bg-white border border-blue-100 shadow-md rounded-xl p-6 overflow-x-auto">
+        {loading ? (
+          <div>
+            <Skeleton count={1} height={40} />
+            <Skeleton count={5} height={35} className="mt-3" />
+          </div>
+        ) : (
+          <table className="min-w-full border border-blue-100 text-sm">
+            <thead className="bg-blue-100 text-blue-800">
+              <tr>
+                <th className="text-left p-3 border-b border-blue-200">Buyer</th>
+                <th className="text-left p-3 border-b border-blue-200">Phone</th>
+                <th className="text-left p-3 border-b border-blue-200">Amount</th>
+                <th className="text-left p-3 border-b border-blue-200">Status</th>
+                <th className="text-left p-3 border-b border-blue-200">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="text-center text-gray-500 py-6 border-b"
+                  >
+                    No orders found.
+                  </td>
+                </tr>
+              )}
+
+              {orders.map((order) => (
+                <tr
+                  key={order._id}
+                  className="hover:bg-blue-50 transition duration-150"
+                >
+                  <td className="p-3 border-b border-blue-100">
+                    {order.buyerId?.name || "Unknown"}
+                  </td>
+                  <td className="p-3 border-b border-blue-100">
+                    {order.buyerPhone || "N/A"}
+                  </td>
+                  <td className="p-3 border-b border-blue-100 text-blue-700 font-medium">
+                    KES {order.amount?.toLocaleString() || 0}
+                  </td>
+                  <td className="p-3 border-b border-blue-100 font-semibold text-green-600 bg-green-50 rounded-lg">
+                    ✅ Paid
+                  </td>
+                  <td className="p-3 border-b border-blue-100 text-gray-600">
+                    {new Date(order.createdAt).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
+
+
+
+
+
+
+
+
 

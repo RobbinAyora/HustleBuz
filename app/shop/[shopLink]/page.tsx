@@ -1,37 +1,78 @@
-'use client';
-import { useRouter } from "next/navigation"; // import router
-import { ShoppingBag, DollarSign, Package, Store } from "lucide-react";
-import Link from "next/link";
-import React, { useEffect, useState } from "react";
+"use client";
+
+import { useParams, useRouter } from "next/navigation";
+import { ShoppingBag, Package, Store } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import Link from "next/link";
 
-export default function ShopPage({ params }: { params: Promise<{ shopLink: string }> }) {
-  const { shopLink } = React.use(params);
+interface Shop {
+  _id: string;
+  name: string;
+  logo?: string;
+  description?: string;
+  owner: string;
+  theme?: {
+    primaryColor?: string;
+    secondaryColor?: string;
+    accentColor?: string;
+  };
+}
+
+interface Product {
+  _id: string;
+  name: string;
+  price: number;
+  stock?: number;
+  images?: string[];
+  description?: string;
+  categories?: string[];
+}
+
+export default function ShopPage() {
   const router = useRouter();
+  const params = useParams();
+  const shopLink = params.shopLink as string;
 
-  const [shop, setShop] = useState<any>(null);
-  const [products, setProducts] = useState<any[]>([]);
+  const [shop, setShop] = useState<Shop | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState<{ [key: string]: boolean }>({});
-  const [cartCount, setCartCount] = useState<number>(0); // cart item count
+  const [cartCount, setCartCount] = useState(0);
 
-  // Fetch shop and products
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // 🟢 Fetch shop + products
   useEffect(() => {
+    if (!shopLink) return;
+
     const fetchShopAndProducts = async () => {
       try {
-        const shopRes = await fetch(`/api/shop/${shopLink}`, { credentials: "include" });
-        if (!shopRes.ok) throw new Error("Failed to load shop");
-        const { shop } = await shopRes.json();
-        setShop(shop);
+        setLoading(true);
+        const shopRes = await fetch(`/api/public/shop/${shopLink}`);
+        const shopData = await shopRes.json();
 
-        const productsRes = await fetch(`/api/products?shop=${shop.owner}`, { credentials: "include" });
-        if (!productsRes.ok) throw new Error("Failed to load products");
-        const data = await productsRes.json();
-        setProducts(data);
+        if (!shopRes.ok || !shopData?.shop) {
+          throw new Error(shopData?.message || "Shop not found");
+        }
 
-        await fetchCartCount(); // fetch cart count when loading shop
-      } catch (err) {
-        console.error(err);
+        setShop(shopData.shop);
+
+        const productsRes = await fetch(
+          `/api/products?vendor=${shopData.shop.owner}`
+        );
+        const productsData = await productsRes.json();
+
+        const productList = Array.isArray(productsData)
+          ? productsData
+          : productsData.products || [];
+
+        setProducts(productList);
+        setFilteredProducts(productList);
+      } catch (err: any) {
+        toast.error(err.message || "Failed to load shop or products");
       } finally {
         setLoading(false);
       }
@@ -40,35 +81,59 @@ export default function ShopPage({ params }: { params: Promise<{ shopLink: strin
     fetchShopAndProducts();
   }, [shopLink]);
 
-  // Fetch cart count
-  const fetchCartCount = async () => {
-    try {
-      const res = await fetch(`/api/shop/${shopLink}/cart`, { credentials: "include" });
-      if (!res.ok) return;
-      const cart = await res.json();
-      setCartCount(cart?.items?.length || 0);
-    } catch (err) {
-      console.error("Failed to fetch cart count:", err);
-    }
-  };
+  // 🟢 Search filter
+  useEffect(() => {
+    const query = searchQuery.toLowerCase();
+    const filtered = products.filter((p) => {
+      const nameMatch = p.name.toLowerCase().includes(query);
+      const descMatch = p.description?.toLowerCase().includes(query);
+      const categoryMatch = p.categories?.some((c) =>
+        c.toLowerCase().includes(query)
+      );
+      return nameMatch || descMatch || categoryMatch;
+    });
+    setFilteredProducts(filtered);
+  }, [searchQuery, products]);
 
-  // Add to cart
+  // 🟢 Add to cart (cookie-based)
   const handleAddToCart = async (productId: string) => {
+    if (!shop) return;
+
+    const product = products.find((p) => p._id === productId);
+    if (!product) {
+      toast.error("Product not found");
+      return;
+    }
+
     setAdding((prev) => ({ ...prev, [productId]: true }));
+
     try {
-      const res = await fetch(`/api/shop/${shopLink}/cart`, {
+      const res = await fetch(`/api/shop-cart/${shop._id}`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId, quantity: 1 }),
+        credentials: "include", // ✅ ensures token cookie is sent
+        body: JSON.stringify({
+          productId: product._id,
+          name: product.name,
+          price: product.price,
+          image: product.images?.[0] || "",
+          vendorId: shop.owner, // ✅ NEW: include vendor ID
+        }),
       });
+
+      if (res.status === 401) {
+        toast.error("Please log in to add items to cart");
+        const redirectUrl = encodeURIComponent(`/shop/${shopLink}`);
+        router.push(`/login?role=buyer&redirect=${redirectUrl}`);
+        return;
+      }
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to add to cart");
+      if (!res.ok) throw new Error(data?.message || "Failed to add to cart");
 
       toast.success("Added to cart!");
-      await fetchCartCount(); // update cart count dynamically
+      setCartCount((prev) => prev + 1);
     } catch (err: any) {
-      console.error("Add to Cart Error:", err);
       toast.error(err.message || "Failed to add to cart");
     } finally {
       setAdding((prev) => ({ ...prev, [productId]: false }));
@@ -78,13 +143,10 @@ export default function ShopPage({ params }: { params: Promise<{ shopLink: strin
   if (loading) return <p className="text-center mt-20">Loading...</p>;
   if (!shop) return <p className="text-center mt-20">Shop not found</p>;
 
-  const themeColor = shop.themeColor || "#4F46E5";
+  const primaryColor = shop.theme?.primaryColor || "#4F46E5";
 
   return (
-    <div
-      className="min-h-screen flex flex-col text-gray-900"
-      style={{ background: `linear-gradient(to bottom, #ffffff, ${themeColor}15)` }}
-    >
+    <div className="min-h-screen flex flex-col bg-white">
       <header className="sticky top-0 bg-white shadow-md z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center space-x-3">
@@ -97,16 +159,23 @@ export default function ShopPage({ params }: { params: Promise<{ shopLink: strin
             ) : (
               <Store className="w-12 h-12 text-gray-600" />
             )}
-            <h1 className="text-xl md:text-2xl font-bold" style={{ color: themeColor }}>
-              {shop.name}
-            </h1>
+            <div>
+              <h1
+                className="text-xl md:text-2xl font-bold"
+                style={{ color: primaryColor }}
+              >
+                {shop.name}
+              </h1>
+              {shop.description && (
+                <p className="text-sm text-gray-600">{shop.description}</p>
+              )}
+            </div>
           </div>
 
-          {/* Cart button now navigates to /[shopLink]/cart */}
           <button
             onClick={() => router.push(`/shop/${shopLink}/cart`)}
-            className="relative flex items-center space-x-2 text-white px-4 py-2 rounded-full hover:scale-105 transform transition"
-            style={{ backgroundColor: themeColor }}
+            className="relative flex items-center space-x-2 text-white px-4 py-2 rounded-full hover:scale-105 transition"
+            style={{ backgroundColor: primaryColor }}
           >
             <ShoppingBag className="w-5 h-5" />
             <span className="hidden sm:inline font-medium">Cart</span>
@@ -119,58 +188,98 @@ export default function ShopPage({ params }: { params: Promise<{ shopLink: strin
         </div>
       </header>
 
-      <main className="flex-grow max-w-7xl mx-auto px-6 py-12">
-        {products.length === 0 ? (
-          <p className="text-center text-gray-500 text-lg">No products available yet.</p>
+      <main className="flex-grow max-w-7xl mx-auto px-6 py-12 bg-white">
+        {filteredProducts.length === 0 ? (
+          <p className="text-center text-gray-500 text-lg">No products found.</p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-10">
-            {products.map((product) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+            {filteredProducts.map((product) => (
               <div
                 key={product._id}
-                className="bg-white rounded-2xl shadow-md hover:shadow-2xl transition transform hover:-translate-y-2 overflow-hidden group flex flex-col"
+                className="rounded-2xl shadow-lg p-6 flex flex-col transition hover:shadow-xl hover:-translate-y-1 bg-white"
+                style={{ border: `1px solid ${primaryColor}30` }}
               >
-                <div className="relative overflow-hidden">
+                <Link href={`/product/${product._id}`}>
                   {product.images?.[0] ? (
                     <img
                       src={product.images[0]}
                       alt={product.name}
-                      className="w-full h-64 object-cover transition-transform duration-500 group-hover:scale-105"
+                      className="h-40 w-full object-cover rounded-lg border mb-4"
+                      style={{ borderColor: primaryColor }}
                     />
                   ) : (
-                    <div className="w-full h-64 bg-gray-200 flex items-center justify-center">
-                      <Package className="w-14 h-14 text-gray-400" />
+                    <div
+                      className="h-40 w-full flex items-center justify-center rounded-lg border mb-4"
+                      style={{ backgroundColor: `${primaryColor}15` }}
+                    >
+                      <Package
+                        className="w-10 h-10"
+                        style={{ color: primaryColor }}
+                      />
                     </div>
                   )}
-                </div>
+                </Link>
 
-                <div className="p-6 flex flex-col flex-grow">
-                  <h3 className="text-lg md:text-xl font-bold line-clamp-1 mb-2">{product.name}</h3>
-                  <div className="flex items-center justify-between mt-auto">
-                    <span
-                      className="flex items-center space-x-1 text-xl font-semibold"
-                      style={{ color: themeColor }}
-                    >
-                      <DollarSign className="w-5 h-5" />
-                      <span>{product.price}</span>
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleAddToCart(product._id)}
-                    disabled={adding[product._id]}
-                    className="w-full mt-5 text-white py-3 rounded-lg font-semibold hover:opacity-90 transition text-base"
-                    style={{ backgroundColor: themeColor }}
-                  >
-                    {adding[product._id] ? "Adding..." : "Add to Cart"}
-                  </button>
-                </div>
+                <h3
+                  className="text-lg font-semibold hover:underline"
+                  style={{ color: primaryColor }}
+                >
+                  {product.name}
+                </h3>
+
+                <p className="text-gray-600 text-sm mt-1">
+                  {product.description?.slice(0, 60) || "No description"}
+                </p>
+
+                <p
+                  className="font-bold mt-3 text-lg"
+                  style={{ color: primaryColor }}
+                >
+                  Ksh.{product.price.toFixed(2)}
+                </p>
+
+                <button
+                  onClick={() => handleAddToCart(product._id)}
+                  disabled={adding[product._id]}
+                  className="mt-4 w-full text-white py-2 rounded-xl font-semibold hover:opacity-90 transition"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  {adding[product._id] ? "Adding..." : "Add to Cart"}
+                </button>
               </div>
             ))}
           </div>
         )}
       </main>
+
+      <footer
+        className="py-6 mt-12 text-center text-white"
+        style={{ backgroundColor: primaryColor }}
+      >
+        <p className="text-sm">
+          © {new Date().getFullYear()} {shop.name}. All rights reserved.
+        </p>
+      </footer>
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
