@@ -14,6 +14,7 @@ export interface IShop extends Document {
   theme: ITheme;
   link: string;
   owner: mongoose.Types.ObjectId;
+  description?: string;   // ✅ Add this
 }
 
 const shopSchema = new Schema<IShop>(
@@ -21,6 +22,9 @@ const shopSchema = new Schema<IShop>(
     name: { type: String, required: true },
     contact: { type: String, required: true },
     logo: { type: String },
+
+    description: { type: String, default: "" },  // ✅ Add this
+
     theme: {
       primaryColor: { type: String, default: "#1D4ED8" },
       secondaryColor: { type: String, default: "#FFFFFF" },
@@ -37,13 +41,14 @@ const shopSchema = new Schema<IShop>(
   { timestamps: true }
 );
 
-// ✅ Each owner can only have one shop per link
+// Each owner can only have one shop per link
 shopSchema.index({ owner: 1, link: 1 }, { unique: true });
 
 const Shop: Model<IShop> =
-  mongoose.models.Shop || mongoose.model("Shop", shopSchema);
+  mongoose.models.Shop || mongoose.model<IShop>("Shop", shopSchema);
 
 export default Shop;
+
 
 
 

@@ -167,12 +167,14 @@ export default function CartPage() {
             </div>
 
             <button
+              type="button" // ✅ Explicit button type
               onClick={() => removeItem(item.productId)}
-              className="text-white p-2 rounded hover:opacity-90 transition"
-              style={{ backgroundColor: primaryColor }}
+              className="remove-btn" // ✅ Use CSS class instead of inline style
+              aria-label="Remove item" // ✅ Accessible name for screen readers
             >
               <Trash2 size={20} />
             </button>
+
           </div>
         ))}
       </div>
@@ -205,7 +207,7 @@ export default function CartPage() {
 
 
 
-           
+
 
 
 

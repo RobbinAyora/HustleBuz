@@ -34,6 +34,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    // ✅ JWT_SECRET is guaranteed to be a string
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
     const vendorId = decoded?.id;
 
@@ -87,6 +88,7 @@ export async function PUT(req: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    // ✅ JWT_SECRET is guaranteed to be a string
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
     const vendorId = decoded?.id;
 
@@ -144,3 +146,5 @@ export async function PUT(req: Request) {
     );
   }
 }
+
+

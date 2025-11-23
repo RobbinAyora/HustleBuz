@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Store, ShoppingBag } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
+import "./Login.css"; // ✅ Added external CSS import for hidden inputs
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -35,30 +36,21 @@ export default function Login() {
       if (res.ok) {
         toast.success("✅ Login successful!", { id: "login-process" });
 
-        // ✅ If there's a next URL, redirect there first
         if (nextUrl) {
           router.push(nextUrl);
           return;
         }
 
-        // ✅ Role-based redirect with subscription check
         if (data.role === "vendor") {
-          console.log("👤 Vendor login success, checking subscription...");
           const subRes = await fetch("/api/subscription/check", { credentials: "include" });
           const subData = await subRes.json();
 
-          console.log("📦 Subscription check result:", subData);
-
-          // ✅ Decide redirect based on subscription status
           if (subData.paid || subData.trialActive) {
-            console.log("✅ Active plan detected → Redirecting to dashboard");
             router.push("/dashboard");
           } else {
-            console.log("🚫 No active plan → Redirecting to subscriptions");
             router.push("/subscriptions");
           }
         } else {
-          console.log("🛍️ Buyer login → Redirecting to marketplace");
           router.push("/marketplace");
         }
       } else {
@@ -81,8 +73,22 @@ export default function Login() {
         className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-md"
       >
         {/* Dummy hidden fields to prevent autofill */}
-        <input type="text" name="fakeusernameremembered" style={{ display: "none" }} />
-        <input type="password" name="fakepasswordremembered" style={{ display: "none" }} />
+      {/* Dummy hidden fields to prevent autofill */}
+<input
+  type="text"
+  name="fakeusernameremembered"
+  className="hidden-input"
+  aria-hidden="true"
+  tabIndex={-1}
+/>
+<input
+  type="password"
+  name="fakepasswordremembered"
+  className="hidden-input"
+  aria-hidden="true"
+  tabIndex={-1}
+/>
+
 
         {/* Icon */}
         <div className="flex justify-center mb-4">
@@ -103,20 +109,34 @@ export default function Login() {
 
         {/* Form */}
         <div className="space-y-4">
-          <input
-            type="email"
-            placeholder="Email"
-            autoComplete="new-email"
-            className="border border-gray-300 rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            autoComplete="new-password"
-            className="border border-gray-300 rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div>
+            <label htmlFor="email" className="sr-only">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              placeholder="Email"
+              autoComplete="new-email"
+              className="border border-gray-300 rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="password" className="sr-only">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              placeholder="Password"
+              autoComplete="new-password"
+              className="border border-gray-300 rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+
           <button
             onClick={handleLogin}
             className="bg-blue-600 text-white w-full py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
@@ -146,6 +166,7 @@ export default function Login() {
     </div>
   );
 }
+
 
 
 

@@ -236,8 +236,10 @@ export default function Shop() {
                 type="text"
                 value={fullShopLink}
                 readOnly
+                aria-label="Shop Link"
                 className="border p-3 w-full rounded-lg bg-gray-100"
               />
+
               <button
                 type="button"
                 onClick={handleCopyLink}
@@ -258,8 +260,10 @@ export default function Shop() {
               type="color"
               value={shop.theme.primaryColor}
               onChange={handleThemeChange}
+              aria-label="Primary Color"
               className="w-12 h-12 cursor-pointer border-none p-0"
             />
+
             <span className="text-gray-700 font-semibold">{shop.theme.primaryColor}</span>
           </div>
         )}

@@ -63,20 +63,16 @@ export default function CheckoutPage() {
   // ✅ Save Order to Database
   const saveOrder = async (orderPayload: any, CheckoutRequestID: string) => {
     try {
-      // Get vendorId from first cart item
       const firstVendor = orderPayload.cart[0]?.vendor;
-
-      if (!firstVendor) {
-        console.warn("⚠️ No vendor found in cart items.");
-      }
+      if (!firstVendor) console.warn("⚠️ No vendor found in cart items.");
 
       const res = await fetch("/api/orders/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vendorId: firstVendor || null,
-          buyerId: orderPayload.buyerId, // logged-in user _id or null
-          buyerPhone: orderPayload.mpesa_number, // ✅ Added to match schema
+          buyerId: orderPayload.buyerId,
+          buyerPhone: orderPayload.mpesa_number,
           items: orderPayload.cart,
           amount: orderPayload.amount,
           CheckoutRequestID,
@@ -98,57 +94,52 @@ export default function CheckoutPage() {
   };
 
   // ✅ Poll M-Pesa Query + Save Order on Success
- const pollPaymentStatus = async (checkoutRequestID: string, orderPayload: any) => {
-  let attempts = 0;
-  const maxAttempts = 8;
+  const pollPaymentStatus = async (checkoutRequestID: string, orderPayload: any) => {
+    let attempts = 0;
+    const maxAttempts = 8;
 
-  const interval = setInterval(async () => {
-    attempts++;
-    try {
-      const res = await fetch("/api/mpesa/stk-query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",      // ✅ CRITICAL FIX
-        body: JSON.stringify({ CheckoutRequestID: checkoutRequestID }),
-      });
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await fetch("/api/mpesa/stk-query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({ CheckoutRequestID: checkoutRequestID }),
+        });
 
-      const data = await res.json();
+        const data = await res.json();
+        const paymentStatus = data?.result?.status;
 
-      // data.result.status contains PAID / FAILED / PENDING
-      const paymentStatus = data?.result?.status;
+        if (paymentStatus === "PAID") {
+          clearInterval(interval);
+          toast.dismiss();
+          toast.success("🎉 Payment confirmed!");
+          setShowConfetti(true);
 
-      if (paymentStatus === "PAID") {
-        clearInterval(interval);
-        toast.dismiss();
-        toast.success("🎉 Payment confirmed!");
-        setShowConfetti(true);
+          if (!savedOrders[checkoutRequestID]) {
+            await saveOrder(orderPayload, checkoutRequestID);
+            setSavedOrders((prev) => ({ ...prev, [checkoutRequestID]: true }));
+          }
 
-        // ✅ Save order only once per CheckoutRequestID
-        if (!savedOrders[checkoutRequestID]) {
-          await saveOrder(orderPayload, checkoutRequestID);
-          setSavedOrders((prev) => ({ ...prev, [checkoutRequestID]: true }));
+          setTimeout(() => setShowConfetti(false), 6000);
+          setTimeout(() => window.location.reload(), 4000);
+        } else if (paymentStatus === "FAILED") {
+          clearInterval(interval);
+          toast.dismiss();
+          toast.error("❌ Payment failed or cancelled.");
+        } else if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          toast.dismiss();
+          toast.error("⚠️ Payment confirmation timed out.");
         }
-
-        setTimeout(() => setShowConfetti(false), 6000);
-        setTimeout(() => window.location.reload(), 4000);
-      } 
-      else if (paymentStatus === "FAILED") {
+      } catch (error) {
+        console.error("Polling error:", error);
         clearInterval(interval);
-        toast.dismiss();
-        toast.error("❌ Payment failed or cancelled.");
-      } 
-      else if (attempts >= maxAttempts) {
-        clearInterval(interval);
-        toast.dismiss();
-        toast.error("⚠️ Payment confirmation timed out.");
+        toast.error("Error confirming payment.");
       }
-    } catch (error) {
-      console.error("Polling error:", error);
-      clearInterval(interval);
-      toast.error("Error confirming payment.");
-    }
-  }, 5000);
-};
+    }, 5000);
+  };
 
   // ✅ Handle Checkout
   const handleCheckout = async () => {
@@ -165,25 +156,21 @@ export default function CheckoutPage() {
       setSubmitting(true);
       toast.dismiss();
 
-      // Generate unique orderId
       const orderId = `order-${Date.now()}`;
-
-      // ✅ Build proper payload with vendor ObjectIds
       const payload = {
         mpesa_number: form.phone,
         amount: cart.totalPrice,
         _id: orderId,
-        buyerId: "66c12f93f3b1d245e8f3d123", // ✅ Replace with real logged-in user's _id
+        buyerId: "66c12f93f3b1d245e8f3d123",
         cart: cart.items.map((item) => ({
           productId: item.productId._id,
           name: item.productId.name,
           quantity: item.quantity,
           price: item.price,
-          vendor: item.productId.vendor, // ✅ actual vendor _id (string)
+          vendor: item.productId.vendor,
         })),
       };
 
-      // Send STK Push
       const stkRes = await fetch("/api/mpesa/stk-push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -203,7 +190,6 @@ export default function CheckoutPage() {
       const requestID = stkData.data.CheckoutRequestID;
       setCheckoutRequestID(requestID);
 
-      // ✅ Poll for payment status
       pollPaymentStatus(requestID, payload);
     } catch (error) {
       console.error("Checkout error:", error);
@@ -214,7 +200,6 @@ export default function CheckoutPage() {
     }
   };
 
-  // ✅ Skeleton Loader
   if (loading) {
     return (
       <SkeletonTheme baseColor="#e0e7ff" highlightColor="#c7d2fe">
@@ -232,7 +217,6 @@ export default function CheckoutPage() {
     );
   }
 
-  // ✅ Empty Cart
   if (!cart || cart.items.length === 0) {
     return (
       <div className="flex justify-center items-center h-screen bg-blue-50">
@@ -256,7 +240,6 @@ export default function CheckoutPage() {
     );
   }
 
-  // ✅ Checkout UI
   return (
     <motion.div
       className="relative min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 text-gray-800 py-10 px-4 overflow-hidden"
@@ -287,9 +270,13 @@ export default function CheckoutPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Payment Method</label>
+                {/* ✅ Added accessible label for select */}
+                <label htmlFor="paymentMethod" className="block text-sm font-medium mb-1">
+                  Payment Method
+                </label>
                 <select
-                  value={form.paymentMethod}
+                  id="paymentMethod"
+                  value={form.paymentMethod || ""}
                   disabled
                   className="w-full border border-blue-200 rounded-lg px-3 py-2 bg-gray-100 text-gray-600"
                 >
@@ -344,6 +331,7 @@ export default function CheckoutPage() {
     </motion.div>
   );
 }
+
 
 
 

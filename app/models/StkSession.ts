@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document, Model } from "mongoose";
 
 interface IStkSession extends Document {
   checkoutRequestID: string;
@@ -15,10 +15,8 @@ const StkSessionSchema = new Schema<IStkSession>(
   { timestamps: true }
 );
 
-// ✅ Always delete cached model before redefining
-delete mongoose.connection.models["StkSession"];
-
-const StkSession =
+// ✅ Correct way: check if model exists, otherwise create it
+const StkSession: Model<IStkSession> =
   mongoose.models.StkSession ||
   mongoose.model<IStkSession>("StkSession", StkSessionSchema, "stk_sessions");
 

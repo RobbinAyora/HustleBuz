@@ -113,6 +113,7 @@ export default function Dashboard() {
       <div className="md:hidden fixed top-0 left-0 right-0 bg-gray-50 z-50 p-4 flex justify-between items-center shadow">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
+          aria-label="Toggle Sidebar"
           className="bg-blue-600 p-2 rounded-lg text-white shadow"
         >
           <motion.div
@@ -263,6 +264,7 @@ export default function Dashboard() {
     </div>
   );
 }
+
 
 
 

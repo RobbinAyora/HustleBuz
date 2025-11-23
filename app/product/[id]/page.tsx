@@ -181,7 +181,7 @@ export default function ProductPage() {
               </div>
             </div>
             <button
-              onClick={() => router.push(`/shop/${product.vendor.link}`)}
+              onClick={() => router.push(`/shop/${product.vendor?.link}`)} // ✅ optional chaining
               className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-xl font-semibold transition"
             >
               Go to Shop
@@ -285,6 +285,7 @@ export default function ProductPage() {
     </motion.div>
   );
 }
+
 
 
 

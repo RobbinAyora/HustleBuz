@@ -298,8 +298,10 @@ export default function Product() {
                   {editingProduct ? "Edit Product" : "Add Product"}
                 </h3>
                 <button
+                  type="button"
                   onClick={() => setShowForm(false)}
                   className="text-gray-500 hover:text-gray-700"
+                  aria-label="Close form"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -335,13 +337,16 @@ export default function Product() {
                   className="border border-gray-300 rounded-lg p-3 w-full focus:ring-2 focus:ring-blue-400 focus:outline-none"
                 />
 
-                {/* ✅ Multi-select Categories */}
+                {/* ✅ Multi-select Categories with label for accessibility */}
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Tags className="w-5 h-5 text-gray-500" />
-                    <span className="font-medium text-gray-700">Categories</span>
-                  </div>
+                  <label
+                    htmlFor="categories-select"
+                    className="flex items-center gap-2 mb-2 font-medium text-gray-700"
+                  >
+                    <Tags className="w-5 h-5 text-gray-500" /> Categories
+                  </label>
                   <select
+                    id="categories-select"
                     multiple
                     value={categories}
                     onChange={(e) =>
@@ -398,6 +403,7 @@ export default function Product() {
     </motion.div>
   );
 }
+
 
 
 

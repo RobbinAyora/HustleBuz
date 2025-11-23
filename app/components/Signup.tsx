@@ -74,8 +74,20 @@ export default function Signup() {
           className="bg-white shadow-lg rounded-2xl p-10 w-full max-w-md border border-gray-100"
         >
           {/* Hidden dummy fields to prevent autofill */}
-          <input type="text" name="fakeusernameremembered" style={{ display: "none" }} />
-          <input type="password" name="fakepasswordremembered" style={{ display: "none" }} />
+          {/* Hidden dummy fields to prevent autofill */}
+          <input
+            type="text"
+            name="fakeusernameremembered"
+            className="sr-only"
+            aria-hidden="true"
+          />
+          <input
+            type="password"
+            name="fakepasswordremembered"
+            className="sr-only"
+            aria-hidden="true"
+          />
+
 
           <h1 className="text-3xl font-extrabold text-blue-700 mb-2 text-center">
             {role === "vendor" ? "Vendor Signup" : "Buyer Signup"}
