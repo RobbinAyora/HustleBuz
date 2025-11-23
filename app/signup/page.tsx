@@ -1,4 +1,5 @@
 import Signup from "../components/Signup";
+import { Suspense } from "react";
 
 
 
@@ -6,7 +7,10 @@ import Signup from "../components/Signup";
 export default function SignupRoute() {
   return (
     <main>
-       <Signup />
+         <Suspense fallback={<div>Loading...</div>}>
+           <Signup />
+         </Suspense>
+     
     </main>
   );
 }
