@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Store, ShoppingBag } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
-import "./Login.css"; // ✅ Added external CSS import for hidden inputs
+
 
 export default function Login() {
   const [email, setEmail] = useState("");
