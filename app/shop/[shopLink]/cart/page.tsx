@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Image from "next/image"; // ✅ Import next/image
 import { ShoppingCart, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -37,7 +38,6 @@ export default function CartPage() {
   const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Check authentication
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -53,7 +53,6 @@ export default function CartPage() {
     checkAuth();
   }, [router]);
 
-  // ✅ Fetch shop + cart
   useEffect(() => {
     const fetchCart = async () => {
       try {
@@ -88,7 +87,6 @@ export default function CartPage() {
     if (shopLink) fetchCart();
   }, [shopLink]);
 
-  // ✅ Remove item
   const removeItem = async (productId: string) => {
     if (!cart || !shopId) return;
 
@@ -111,7 +109,6 @@ export default function CartPage() {
     }
   };
 
-  // ✅ Redirect to checkout
   const handleCheckout = () => {
     if (!shopId) return toast.error("Shop not found");
     router.push(`/checkout?shopId=${shopId}`);
@@ -149,11 +146,12 @@ export default function CartPage() {
           >
             <div className="flex items-center gap-4">
               {item.image && (
-                <img
+                <Image
                   src={item.image}
                   alt={item.name}
-                  className="w-16 h-16 rounded object-cover"
-                  style={{ borderColor: `${primaryColor}50` }}
+                  width={64}
+                  height={64}
+                  className="rounded object-cover"
                 />
               )}
               <div>
@@ -167,14 +165,13 @@ export default function CartPage() {
             </div>
 
             <button
-              type="button" // ✅ Explicit button type
+              type="button"
               onClick={() => removeItem(item.productId)}
-              className="remove-btn" // ✅ Use CSS class instead of inline style
-              aria-label="Remove item" // ✅ Accessible name for screen readers
+              className="remove-btn"
+              aria-label="Remove item"
             >
               <Trash2 size={20} />
             </button>
-
           </div>
         ))}
       </div>
@@ -194,6 +191,7 @@ export default function CartPage() {
     </div>
   );
 }
+
 
 
 

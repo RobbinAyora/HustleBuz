@@ -2,9 +2,10 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { ShoppingBag, Package, Store } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react"; // Removed unused searchRef
 import toast from "react-hot-toast";
 import Link from "next/link";
+import Image from "next/image"; // ✅ Import next/image
 
 interface Shop {
   _id: string;
@@ -42,8 +43,6 @@ export default function ShopPage() {
   const [adding, setAdding] = useState<{ [key: string]: boolean }>({});
   const [cartCount, setCartCount] = useState(0);
 
-  const searchRef = useRef<HTMLDivElement>(null);
-
   // 🟢 Fetch shop + products
   useEffect(() => {
     if (!shopLink) return;
@@ -52,7 +51,7 @@ export default function ShopPage() {
       try {
         setLoading(true);
         const shopRes = await fetch(`/api/public/shop/${shopLink}`);
-        const shopData = await shopRes.json();
+        const shopData: { shop?: Shop; message?: string } = await shopRes.json();
 
         if (!shopRes.ok || !shopData?.shop) {
           throw new Error(shopData?.message || "Shop not found");
@@ -63,16 +62,19 @@ export default function ShopPage() {
         const productsRes = await fetch(
           `/api/products?vendor=${shopData.shop.owner}`
         );
-        const productsData = await productsRes.json();
+        const productsData: { products?: Product[] } | Product[] = await productsRes.json();
 
-        const productList = Array.isArray(productsData)
+        const productList: Product[] = Array.isArray(productsData)
           ? productsData
           : productsData.products || [];
 
         setProducts(productList);
         setFilteredProducts(productList);
-      } catch (err: any) {
-        toast.error(err.message || "Failed to load shop or products");
+      } catch (err: unknown) {
+        // ✅ Proper typing instead of any
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to load shop or products";
+        toast.error(errorMessage);
       } finally {
         setLoading(false);
       }
@@ -111,13 +113,13 @@ export default function ShopPage() {
       const res = await fetch(`/api/shop-cart/${shop._id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // ✅ ensures token cookie is sent
+        credentials: "include",
         body: JSON.stringify({
           productId: product._id,
           name: product.name,
           price: product.price,
           image: product.images?.[0] || "",
-          vendorId: shop.owner, // ✅ NEW: include vendor ID
+          vendorId: shop.owner,
         }),
       });
 
@@ -128,13 +130,15 @@ export default function ShopPage() {
         return;
       }
 
-      const data = await res.json();
+      const data: { message?: string } = await res.json();
       if (!res.ok) throw new Error(data?.message || "Failed to add to cart");
 
       toast.success("Added to cart!");
       setCartCount((prev) => prev + 1);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to add to cart");
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to add to cart";
+      toast.error(errorMessage);
     } finally {
       setAdding((prev) => ({ ...prev, [productId]: false }));
     }
@@ -151,10 +155,12 @@ export default function ShopPage() {
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center space-x-3">
             {shop.logo ? (
-              <img
+              <Image
                 src={shop.logo}
                 alt={shop.name}
-                className="w-12 h-12 rounded-full border border-gray-200 object-cover"
+                width={48}
+                height={48}
+                className="rounded-full border border-gray-200 object-cover"
               />
             ) : (
               <Store className="w-12 h-12 text-gray-600" />
@@ -201,11 +207,12 @@ export default function ShopPage() {
               >
                 <Link href={`/product/${product._id}`}>
                   {product.images?.[0] ? (
-                    <img
+                    <Image
                       src={product.images[0]}
                       alt={product.name}
-                      className="h-40 w-full object-cover rounded-lg border mb-4"
-                      style={{ borderColor: primaryColor }}
+                      width={400}
+                      height={160}
+                      className="object-cover rounded-lg mb-4"
                     />
                   ) : (
                     <div
