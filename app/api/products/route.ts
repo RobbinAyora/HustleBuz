@@ -1,4 +1,6 @@
+// app/api/products/route.ts
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/app/lib/db";
 import MarketplaceProduct from "@/app/models/Product";
 import { verifyToken } from "@/app/lib/auth";
@@ -33,10 +35,6 @@ const ALLOWED_CATEGORIES = [
 
 /**
  * ✅ GET — Fetch Products
- * Handles:
- *  - ?vendor=<id>  → Public shop page
- *  - ?marketplace=true → General marketplace view
- *  - Authenticated vendor dashboard (requires JWT)
  */
 export async function GET(req: Request) {
   try {
@@ -45,33 +43,26 @@ export async function GET(req: Request) {
     const vendorId = searchParams.get("vendor");
     const marketplace = searchParams.get("marketplace");
 
-    // ✅ Case 1: Public shop products (no auth)
+    // Public shop products
     if (vendorId) {
-      const products = await MarketplaceProduct.find({ vendor: vendorId })
-        .sort({ createdAt: -1 });
+      const products = await MarketplaceProduct.find({ vendor: vendorId }).sort({ createdAt: -1 });
       return NextResponse.json(products, { status: 200 });
     }
 
-    // ✅ Case 2: Marketplace-wide view
+    // Marketplace-wide view
     if (marketplace === "true") {
-      const products = await MarketplaceProduct.find()
-        .sort({ createdAt: -1 });
+      const products = await MarketplaceProduct.find().sort({ createdAt: -1 });
       return NextResponse.json(products, { status: 200 });
     }
 
-    // ✅ Case 3: Vendor dashboard (requires auth)
+    // Vendor dashboard (requires auth)
     const token = extractTokenFromCookies(req.headers.get("cookie"));
-    if (!token) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
+    if (!token) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const decoded: any = verifyToken(token);
-    if (!decoded || decoded.role !== "vendor") {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
+    const decoded = verifyToken(token) as { id: string; role: string } | null;
+    if (!decoded || decoded.role !== "vendor") return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const products = await MarketplaceProduct.find({ vendor: decoded.id })
-      .sort({ createdAt: -1 });
+    const products = await MarketplaceProduct.find({ vendor: decoded.id }).sort({ createdAt: -1 });
     return NextResponse.json(products, { status: 200 });
 
   } catch (error: any) {
@@ -85,29 +76,30 @@ export async function GET(req: Request) {
 
 /**
  * ✅ POST — Create a New Product
- * Requires vendor authentication
  */
 export async function POST(req: Request) {
   try {
     await connectDB();
 
     const token = extractTokenFromCookies(req.headers.get("cookie"));
-    if (!token) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
+    if (!token) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const decoded: any = verifyToken(token);
-    if (!decoded || decoded.role !== "vendor") {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
+    const decoded = verifyToken(token) as { id: string; role: string } | null;
+    if (!decoded || decoded.role !== "vendor") return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const { name, description, price, stock, images, categories } = await req.json();
+    const body: {
+      name: string;
+      description?: string;
+      price: number;
+      stock: number;
+      images?: string[];
+      categories?: string[];
+    } = await req.json();
+
+    const { name, description, price, stock, images, categories } = body;
 
     if (!name || typeof price !== "number" || typeof stock !== "number") {
-      return NextResponse.json(
-        { message: "Please provide all required fields" },
-        { status: 400 }
-      );
+      return NextResponse.json({ message: "Please provide all required fields" }, { status: 400 });
     }
 
     const validCategories = Array.isArray(categories)
@@ -121,7 +113,7 @@ export async function POST(req: Request) {
       stock,
       images: Array.isArray(images) ? images : [],
       categories: validCategories.length ? validCategories : ["Other"],
-      vendor: decoded.id, // ✅ vendor comes from JWT
+      vendor: new mongoose.Types.ObjectId(decoded.id), // ✅ Convert string to ObjectId
     });
 
     return NextResponse.json(newProduct, { status: 201 });
@@ -134,6 +126,7 @@ export async function POST(req: Request) {
     );
   }
 }
+
 
 
 

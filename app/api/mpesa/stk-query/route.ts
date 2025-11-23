@@ -6,8 +6,14 @@ import { NextResponse } from "next/server";
 const POLL_INTERVAL_MS = 15000; // 15 seconds
 const MAX_RETRIES = 5;
 
+interface StkResult {
+  status: "PAID" | "FAILED" | "PENDING";
+  resultDesc?: string;
+  [key: string]: any;
+}
+
 // 🔒 Prevent multiple simultaneous stk-query calls for the same CheckoutRequestID
-const activeQueries = new Map<string, Promise<{ success: boolean; result: any }>>();
+const activeQueries = new Map<string, Promise<{ success: boolean; result: StkResult }>>();
 
 export async function POST(req: Request) {
   try {
@@ -18,7 +24,6 @@ export async function POST(req: Request) {
     const checkoutRequestID: string | undefined =
       body.checkoutRequestID || body.CheckoutRequestID;
 
-    // Validate input
     if (!checkoutRequestID) {
       console.warn("⚠️ Missing required field: checkoutRequestID");
       return NextResponse.json(
@@ -29,17 +34,15 @@ export async function POST(req: Request) {
 
     console.log("ℹ️ Starting STK Query processing...");
 
-    // 🔒 If a query for this CheckoutRequestID is already running, return the stored plain data
     if (activeQueries.has(checkoutRequestID)) {
       console.log("⏳ Returning existing in-progress STK Query result...");
       const existingData = await activeQueries.get(checkoutRequestID);
       return NextResponse.json(existingData);
     }
 
-    // Wrap entire polling logic inside a promise that resolves to **plain data**
-    const queryPromise = (async () => {
+    const queryPromise = (async (): Promise<{ success: boolean; result: StkResult }> => {
       let attempt = 0;
-      let result;
+      let result: StkResult | undefined;
 
       while (attempt < MAX_RETRIES) {
         attempt++;
@@ -55,8 +58,9 @@ export async function POST(req: Request) {
           );
 
           await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        } catch (err: any) {
-          console.warn(`⚠️ STK Query failed on attempt ${attempt}: ${err.message}`);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          console.warn(`⚠️ STK Query failed on attempt ${attempt}: ${message}`);
           await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
         }
       }
@@ -67,39 +71,31 @@ export async function POST(req: Request) {
 
       console.log("✅ STK Query result:", result);
 
-      // 🔑 Return plain object, not NextResponse
       return { success: true, result };
     })();
 
-    // Store running query (plain data promise)
     activeQueries.set(checkoutRequestID, queryPromise);
 
-    // Wait for result
     const finalData = await queryPromise;
 
-    // Remove from active queries after completion
     activeQueries.delete(checkoutRequestID);
 
-    // Wrap in a fresh NextResponse
     return NextResponse.json(finalData);
-  } catch (error: any) {
-    console.error("❌ STK Query API Error:", error);
-    if (error.response) {
-      console.error("🔹 Response data:", error.response.data);
-      console.error("🔹 Response status:", error.response.status);
-      console.error("🔹 Response headers:", error.response.headers);
-    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("❌ STK Query API Error:", message);
 
     return NextResponse.json(
       {
         success: false,
         message: "Server error occurred while confirming STK payment",
-        details: error.message,
+        details: message,
       },
       { status: 500 }
     );
   }
 }
+
 
 
 

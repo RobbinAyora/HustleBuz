@@ -5,13 +5,27 @@ import { useParams, useRouter } from "next/navigation";
 import { ShoppingBag, Trash2, CreditCard } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 
+// ----------------------
+// TYPES
+// ----------------------
 interface CartItem {
   _id: string;
-  productId: string;  // ObjectId string
-  vendorId: string;   // ObjectId string
+  productId: string; // ObjectId string
+  vendorId: string; // ObjectId string
   name: string;
   price: number;
   quantity: number;
+}
+
+interface FetchCartResponse {
+  items: Array<{
+    _id: string;
+    productId: string | { _id: string; vendor?: { _id: string } ; name?: string; price?: number };
+    vendorId?: string;
+    name?: string;
+    price?: number;
+    quantity?: number;
+  }>;
 }
 
 export default function Cart() {
@@ -19,9 +33,10 @@ export default function Cart() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [checkingOut, setCheckingOut] = useState(false);
-  const params = useParams();
+
+  const params = useParams() as { shopLink?: string };
   const router = useRouter();
-  const shopLink = params?.shopLink as string | undefined;
+  const shopLink = params?.shopLink;
 
   // ✅ Load cart items
   useEffect(() => {
@@ -30,22 +45,29 @@ export default function Cart() {
         const apiUrl = shopLink ? `/api/shop/${shopLink}/cart` : `/api/cart`;
         const res = await fetch(apiUrl, { credentials: "include" });
         if (!res.ok) throw new Error("Failed to fetch cart");
-        const data = await res.json();
 
-        const items = data.items || [];
+        const data: FetchCartResponse = await res.json();
 
-        setCart(
-          items.map((item: any) => ({
-            _id: item._id,
-            productId: typeof item.productId === "object" ? item.productId._id : item.productId,
-            vendorId:
-              item.vendorId ||
-              (item.productId?.vendor?._id || "unknown_vendor"),
-            name: item.name || item.productId?.name || "Unknown Product",
-            price: item.price || item.productId?.price || 0,
-            quantity: item.quantity || 1,
-          }))
-        );
+        const items: CartItem[] = (data.items || []).map((item) => ({
+          _id: item._id,
+          productId:
+            typeof item.productId === "object" ? item.productId._id : item.productId,
+          vendorId:
+            item.vendorId ||
+            (typeof item.productId === "object" && item.productId.vendor?._id) ||
+            "unknown_vendor",
+          name:
+            item.name ||
+            (typeof item.productId === "object" && item.productId.name) ||
+            "Unknown Product",
+          price:
+            item.price ||
+            (typeof item.productId === "object" && item.productId.price) ||
+            0,
+          quantity: item.quantity || 1,
+        }));
+
+        setCart(items);
       } catch (error) {
         console.error("Cart fetch error:", error);
         toast.error("Failed to load cart");

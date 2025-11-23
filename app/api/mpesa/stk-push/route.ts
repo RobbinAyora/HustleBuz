@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import axios from "axios";
+import axios, { AxiosResponse } from "axios";
 import { connectDB } from "@/app/lib/db";
 import CheckoutSession from "@/app/models/CheckoutSession";
 import SubscriptionPayment from "@/app/models/SubscriptionPayment";
@@ -28,20 +28,20 @@ export async function POST(req: Request) {
       `${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`
     ).toString("base64");
 
-    const tokenResponse = await axios.get(
+    const tokenResponse: AxiosResponse<{ access_token: string }> = await axios.get(
       `${MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`,
       { headers: { Authorization: `Basic ${auth}` } }
     );
 
     const accessToken = tokenResponse.data.access_token;
 
-    // ✅ Format phone number
+    // Format phone number
     const cleanedNumber = mpesa_number.replace(/\D/g, "");
     const formattedPhone = cleanedNumber.startsWith("254")
       ? cleanedNumber
       : `254${cleanedNumber.slice(-9)}`;
 
-    // ✅ Timestamp & password
+    // Timestamp & password
     const date = new Date();
     const timestamp =
       date.getFullYear().toString() +
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       `${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`
     ).toString("base64");
 
-    // ✅ Save temporary session based on purpose
+    // Save temporary session
     let session;
     if (purpose === "order") {
       session = await CheckoutSession.create({
@@ -70,13 +70,13 @@ export async function POST(req: Request) {
         userId: _id,
         phone: formattedPhone,
         amount,
-        planType: amount === 500 ? "WEEKLY" : "MONTHLY", // example logic
+        planType: amount === 500 ? "WEEKLY" : "MONTHLY",
         status: "PENDING",
       });
     }
 
-    // ✅ Send STK Push
-    const stkResponse = await axios.post(
+    // Send STK Push
+    const stkResponse: AxiosResponse<any> = await axios.post(
       `${MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest`,
       {
         BusinessShortCode: process.env.MPESA_SHORTCODE,
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
-    // ✅ Save CheckoutRequestID
+    // Save CheckoutRequestID
     if (purpose === "order") {
       await CheckoutSession.findByIdAndUpdate(session._id, {
         checkoutRequestID: stkResponse.data.CheckoutRequestID,
@@ -114,14 +114,16 @@ export async function POST(req: Request) {
       success: true,
       data: stkResponse.data,
     });
-  } catch (error: any) {
-    console.error("❌ STK Push Error:", error?.response?.data || error.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("❌ STK Push Error:", message);
     return NextResponse.json(
-      { success: false, message: "STK Push request failed" },
+      { success: false, message: "STK Push request failed", details: message },
       { status: 500 }
     );
   }
 }
+
 
 
 

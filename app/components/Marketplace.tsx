@@ -17,12 +17,20 @@ interface Product {
   vendor?: string;
 }
 
+interface CartItem {
+  productId: string;
+  name: string;
+  price: number;
+  image?: string;
+  vendorId?: string;
+}
+
 export default function Marketplace() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [cart, setCart] = useState<any[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
 
   // ✅ Fetch products
   useEffect(() => {
@@ -31,7 +39,7 @@ export default function Marketplace() {
         setLoading(true);
         const res = await fetch("/api/products?marketplace=true");
         if (!res.ok) throw new Error("Failed to fetch products");
-        const data = await res.json();
+        const data: Product[] = await res.json();
         setProducts(data);
       } catch (err) {
         console.error("Error fetching marketplace products:", err);
@@ -49,7 +57,7 @@ export default function Marketplace() {
       try {
         const res = await fetch("/api/cart", { credentials: "include" });
         if (!res.ok) throw new Error("Failed to fetch cart");
-        const data = await res.json();
+        const data: { items: CartItem[] } = await res.json();
         setCart(data.items || []);
       } catch (err) {
         console.error("Error fetching cart:", err);
@@ -75,7 +83,16 @@ export default function Marketplace() {
       });
 
       if (!res.ok) throw new Error("Failed to add to cart");
-      setCart((prev) => [...prev, product]);
+      setCart((prev) => [
+        ...prev,
+        {
+          productId: product._id,
+          name: product.name,
+          price: product.price,
+          image: product.images?.[0] || "",
+          vendorId: product.vendor,
+        },
+      ]);
       toast.success(`${product.name} added to cart`);
     } catch (err) {
       console.error(err);
@@ -92,7 +109,7 @@ export default function Marketplace() {
       });
 
       if (!res.ok) throw new Error("Failed to remove item");
-      const data = await res.json();
+      const data: { items: CartItem[] } = await res.json();
       setCart(data.items || []);
       toast.success("Item removed from cart");
     } catch (err) {
@@ -112,7 +129,7 @@ export default function Marketplace() {
 
   // ✅ Suggestions
   const suggestions = Array.from(
-    new Set([
+    new Set<string>([
       ...products
         .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
         .map((p) => p.name),

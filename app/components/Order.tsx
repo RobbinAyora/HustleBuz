@@ -4,11 +4,28 @@ import { useEffect, useState } from "react";
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
 
+interface Buyer {
+  name?: string;
+}
+
+interface Order {
+  _id: string;
+  buyerId?: Buyer;
+  buyerPhone?: string;
+  amount?: number;
+  createdAt: string;
+}
+
+interface Stats {
+  totalOrders: number;
+  totalSales: number;
+}
+
 export default function VendorOrders() {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [stats, setStats] = useState({ totalOrders: 0, totalSales: 0 });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [stats, setStats] = useState<Stats>({ totalOrders: 0, totalSales: 0 });
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>("");
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -20,7 +37,10 @@ export default function VendorOrders() {
           cache: "no-store",
         });
 
-        const data = await res.json();
+        const data: {
+          data: { orders: Order[]; stats: Stats };
+          message?: string;
+        } = await res.json();
 
         if (!res.ok) throw new Error(data.message || "Failed to load orders");
 
@@ -69,8 +89,7 @@ export default function VendorOrders() {
             <div className="bg-white border border-blue-100 shadow-md rounded-xl p-4 text-center hover:shadow-lg transition">
               <h2 className="text-blue-500 text-sm font-medium">Total Sales</h2>
               <p className="text-2xl font-bold text-blue-700 mt-2">
-                KES {stats.totalSales ? stats.totalSales.toLocaleString() : '0'}
-
+                KES {stats.totalSales ? stats.totalSales.toLocaleString() : "0"}
               </p>
             </div>
           </>
@@ -136,6 +155,8 @@ export default function VendorOrders() {
     </div>
   );
 }
+
+
 
 
 

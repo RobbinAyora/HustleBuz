@@ -9,7 +9,6 @@ export async function GET() {
   try {
     await connectDB();
 
-    // ✅ Ensure JWT_SECRET is defined
     if (!JWT_SECRET) {
       console.error("JWT_SECRET is not defined in environment variables");
       return NextResponse.json(
@@ -18,7 +17,6 @@ export async function GET() {
       );
     }
 
-    // ✅ Get token from cookies
     const cookieStore = await cookies();
     const token = cookieStore.get("token")?.value;
 
@@ -26,14 +24,12 @@ export async function GET() {
       return NextResponse.json({ error: "No token provided" }, { status: 401 });
     }
 
-    // ✅ Verify the JWT
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload & { id?: string };
 
     if (!decoded?.id) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
-    // ✅ Find user
     const user = await User.findById(decoded.id).select("-password");
 
     if (!user) {
@@ -41,13 +37,14 @@ export async function GET() {
     }
 
     return NextResponse.json({ user }, { status: 200 });
-  } catch (error: any) {
-    console.error("Error in /api/auth/me:", error);
-    return NextResponse.json(
-      { error: "Invalid or expired token" },
-      { status: 401 }
-    );
+  } catch (error: unknown) {
+    // ✅ Narrow unknown type safely
+    const message =
+      error instanceof Error ? error.message : "Invalid or expired token";
+    console.error("Error in /api/auth/me:", message);
+    return NextResponse.json({ error: message }, { status: 401 });
   }
 }
+
 
 

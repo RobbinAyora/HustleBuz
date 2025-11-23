@@ -8,6 +8,12 @@ import { cookies } from "next/headers";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your_secret_key";
 
+// ✅ Type for incoming cart items
+interface CartItem {
+  productId: string;
+  quantity: number;
+}
+
 export async function POST(req: Request) {
   try {
     console.log("🟦 Checkout request received");
@@ -18,10 +24,10 @@ export async function POST(req: Request) {
 
     // ✅ Parse request body
     const body = await req.json();
-    const { cartItems } = body;
+    const cartItems: CartItem[] = body.cartItems;
     console.log("🟨 Request body:", body);
 
-    if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
+    if (!cartItems || cartItems.length === 0) {
       return NextResponse.json(
         { error: "Invalid or empty cart items" },
         { status: 400 }
@@ -95,7 +101,11 @@ export async function POST(req: Request) {
     for (const [vendorId, items] of Object.entries(vendorGroups)) {
       if (items.length === 0) continue;
 
-      const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+      // ✅ Type items for reduce
+      const total = items.reduce(
+        (sum: number, i: { price: number; quantity: number }) => sum + i.price * i.quantity,
+        0
+      );
 
       const order = new Order({
         buyer: userId,
@@ -111,10 +121,11 @@ export async function POST(req: Request) {
 
     console.log("✅ Checkout complete");
     return NextResponse.json({ message: "Orders created", createdOrders });
-  } catch (error: any) {
-    console.error("🔥 Checkout route error:", error.message, error.stack);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("🔥 Checkout route error:", message);
     return NextResponse.json(
-      { error: "Internal Server Error", details: error.message },
+      { error: "Internal Server Error", details: message },
       { status: 500 }
     );
   }

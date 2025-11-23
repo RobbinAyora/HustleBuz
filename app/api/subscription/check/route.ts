@@ -4,25 +4,35 @@ import SubscriptionPayment from "@/app/models/SubscriptionPayment";
 import User from "@/app/models/User";
 import jwt from "jsonwebtoken";
 import { confirmStkPayment } from "@/actions/StkPushQuery";
+import mongoose from "mongoose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your_secret_key";
+
+interface JwtPayload {
+  id: string;
+  role?: string;
+  name?: string;
+}
 
 // Helper: Check active paid subscription or pending STK payments
 async function checkPaidSubscription(userId: string) {
   console.log("💰 Checking for active paid subscription...");
+
   let paidSub = await SubscriptionPayment.findOne({
-    userId,
+    userId: new mongoose.Types.ObjectId(userId),
     status: "PAID",
     endDate: { $gte: new Date() },
   });
+
   console.log("💰 Paid subscription found:", !!paidSub);
 
   if (!paidSub) {
     const pendingSub = await SubscriptionPayment.findOne({
-      userId,
+      userId: new mongoose.Types.ObjectId(userId),
       status: "PENDING",
       checkoutRequestID: { $exists: true, $ne: null },
     });
+
     console.log("⏳ Pending subscription found:", !!pendingSub);
 
     if (pendingSub) {
@@ -32,7 +42,7 @@ async function checkPaidSubscription(userId: string) {
 
       if (result.status === "PAID") {
         paidSub = await SubscriptionPayment.findById(pendingSub._id); // reload updated document
-        console.log("✅ Subscription marked as PAID after STK confirmation:", paidSub._id);
+        console.log("✅ Subscription marked as PAID after STK confirmation:", paidSub?._id);
       } else if (result.status === "FAILED") {
         console.log("❌ STK payment failed for subscription:", pendingSub._id);
       } else {
@@ -48,11 +58,12 @@ async function checkPaidSubscription(userId: string) {
 async function checkFreeTrial(userId: string) {
   console.log("🆓 Checking for active free trial...");
   const freeTrial = await SubscriptionPayment.findOne({
-    userId,
+    userId: new mongoose.Types.ObjectId(userId),
     plan: "free_trial",
     status: "ACTIVE",
     endDate: { $gte: new Date() },
   });
+
   console.log("🆓 Active free trial found:", !!freeTrial);
   return freeTrial;
 }
@@ -65,7 +76,7 @@ async function createFreeTrial(userId: string) {
   end.setDate(end.getDate() + 30);
 
   const newTrial = await SubscriptionPayment.create({
-    userId,
+    userId: new mongoose.Types.ObjectId(userId),
     plan: "free_trial",
     status: "ACTIVE",
     startDate: start,
@@ -84,8 +95,6 @@ export async function GET(req: Request) {
     console.log("✅ Database connected");
 
     const cookieHeader = req.headers.get("cookie");
-    console.log("🍪 Cookie header:", cookieHeader);
-
     if (!cookieHeader) {
       console.log("❌ No cookie found");
       return NextResponse.json({ success: false, message: "No cookie found" }, { status: 401 });
@@ -93,16 +102,14 @@ export async function GET(req: Request) {
 
     const tokenMatch = cookieHeader.match(/token=([^;]+)/);
     const token = tokenMatch ? tokenMatch[1] : null;
-    console.log("🔑 Extracted token:", token ? "found" : "not found");
-
     if (!token) {
       console.log("❌ No token found in cookies");
       return NextResponse.json({ success: false, message: "No token found" }, { status: 401 });
     }
 
-    let decoded: any;
+    let decoded: JwtPayload;
     try {
-      decoded = jwt.verify(token, JWT_SECRET);
+      decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
       console.log("✅ Token decoded:", decoded);
     } catch (err) {
       console.log("❌ Invalid token:", err);
@@ -110,16 +117,13 @@ export async function GET(req: Request) {
     }
 
     const userId = decoded.id;
-    console.log("👤 Decoded userId:", userId);
 
     const user = await User.findById(userId);
-    console.log("👤 User found:", !!user);
     if (!user) return NextResponse.json({ success: false, message: "User not found" }, { status: 404 });
 
     // 1️⃣ Check paid subscription or pending STK payments
     const paidSub = await checkPaidSubscription(userId);
     if (paidSub) {
-      console.log("✅ Active paid subscription valid until", paidSub.endDate);
       return NextResponse.json({
         success: true,
         paid: true,
@@ -133,7 +137,6 @@ export async function GET(req: Request) {
     // 2️⃣ Check active free trial
     const freeTrial = await checkFreeTrial(userId);
     if (freeTrial) {
-      console.log("✅ Free trial valid until", freeTrial.endDate);
       return NextResponse.json({
         success: true,
         paid: false,
@@ -145,9 +148,7 @@ export async function GET(req: Request) {
     }
 
     // 3️⃣ Create free trial if allowed
-    const existingSubs = await SubscriptionPayment.findOne({ userId });
-    console.log("🧾 Existing subscription record found:", !!existingSubs);
-
+    const existingSubs = await SubscriptionPayment.findOne({ userId: new mongoose.Types.ObjectId(userId) });
     if (!existingSubs && user.role !== "vendor") {
       const newTrial = await createFreeTrial(userId);
       return NextResponse.json({
@@ -161,7 +162,6 @@ export async function GET(req: Request) {
     }
 
     // 4️⃣ Subscription exists but expired
-    console.log("⚠️ Subscription exists but is expired");
     return NextResponse.json({
       success: false,
       paid: false,
@@ -170,10 +170,12 @@ export async function GET(req: Request) {
       status: "EXPIRED",
       message: "Subscription or trial expired",
     });
-  } catch (error: any) {
-    console.error("❌ Subscription Check Error:", error.message);
+
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("❌ Subscription Check Error:", message);
     return NextResponse.json(
-      { success: false, message: "Server error", details: error.message },
+      { success: false, message: "Server error", details: message },
       { status: 500 }
     );
   }

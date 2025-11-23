@@ -7,6 +7,24 @@ import { cookies } from "next/headers";
 import mongoose from "mongoose";
 import MarketplaceProduct from "@/app/models/Product";
 
+// ✅ Define local type for Order items
+interface OrderItem {
+  productId: mongoose.Types.ObjectId | string;
+  vendor: mongoose.Types.ObjectId | string;
+  quantity: number;
+  price: number;
+}
+
+interface OrderType {
+  _id: mongoose.Types.ObjectId | string;
+  buyerId?: { name: string; email: string } | null;
+  buyerPhone?: string;
+  items: OrderItem[];
+  amount: number;
+  status: string;
+  createdAt: Date;
+}
+
 export async function GET() {
   try {
     await connectDB();
@@ -18,34 +36,48 @@ export async function GET() {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const decoded = verifyToken(token) as { id: string; role: string };
-
+    const decoded = verifyToken(token) as { id: string; role: string } | null;
     if (!decoded || decoded.role !== "vendor") {
       return NextResponse.json({ message: "Access denied" }, { status: 403 });
     }
 
-    // ✅ Ensure Product model is registered (for populate)
     if (!mongoose.models.Product) {
       mongoose.model("Product", MarketplaceProduct.schema);
     }
 
-    // ✅ Verify vendor exists
     const vendor = await User.findById(decoded.id).select("-password");
     if (!vendor) {
       return NextResponse.json({ message: "Vendor not found" }, { status: 404 });
     }
 
-    // ✅ Fetch all orders that include this vendor’s items
-    const orders = await Order.find({ "items.vendor": vendor._id })
-      .populate("buyerId", "name email") // buyerId optional, populate if exists
+    // Fetch all orders that include this vendor’s items
+    const ordersRaw = await Order.find({ "items.vendor": vendor._id })
+      .populate("buyerId", "name email")
       .populate("items.productId", "name price images")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
-    // ✅ Compute summary stats
-    const totalSales = orders.reduce((sum, o) => sum + o.amount, 0);
+    // ✅ Map raw orders to OrderType safely
+    const orders: OrderType[] = ordersRaw.map((order: any) => ({
+      _id: order._id,
+      buyerId: order.buyerId
+        ? { name: order.buyerId.name, email: order.buyerId.email }
+        : null,
+      buyerPhone: order.buyerPhone || "",
+      items: (order.items || []).map((item: any) => ({
+        productId: item.productId._id || item.productId,
+        vendor: item.vendor,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      amount: order.amount || 0,
+      status: order.status,
+      createdAt: order.createdAt,
+    }));
+
+    const totalSales = orders.reduce((sum, order) => sum + order.amount, 0);
     const totalOrders = orders.length;
 
-    // ✅ Include buyer phone for clarity
     const formattedOrders = orders.map((order) => ({
       _id: order._id,
       amount: order.amount,
@@ -73,14 +105,15 @@ export async function GET() {
         orders: formattedOrders,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("❌ Vendor Orders Route Error:", error);
-    return NextResponse.json(
-      { message: "Server error", details: error.message },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ message: "Server error", details: message }, { status: 500 });
   }
 }
+
+
+
 
 
 

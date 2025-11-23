@@ -13,12 +13,15 @@ export async function POST(req: Request) {
     let { vendorId, buyerId, buyerPhone, items, amount, CheckoutRequestID } = body;
 
     // ✅ Flatten vendorId if it's an object
-    if (typeof vendorId === "object" && vendorId._id) vendorId = vendorId._id;
+    if (typeof vendorId === "object" && vendorId._id) {
+      vendorId = vendorId._id;
+    }
 
     // ✅ Convert vendorId and buyerId to ObjectId (buyerId optional)
     const vendorObjectId = mongoose.Types.ObjectId.isValid(vendorId)
       ? new mongoose.Types.ObjectId(vendorId)
       : null;
+
     const buyerObjectId =
       buyerId && mongoose.Types.ObjectId.isValid(buyerId)
         ? new mongoose.Types.ObjectId(buyerId)
@@ -41,6 +44,7 @@ export async function POST(req: Request) {
     // ✅ Ensure all items have proper ObjectIds
     const itemsWithObjectIds = (items || []).map((item: any) => {
       let itemVendorId = item.vendor;
+
       if (typeof item.vendor === "object" && item.vendor._id) {
         itemVendorId = item.vendor._id;
       }
@@ -52,15 +56,15 @@ export async function POST(req: Request) {
       };
     });
 
-    // ✅ Create new order (status changed to 'paid')
+    // ✅ Create new order (status set to 'paid')
     const order = await Order.create({
       vendorId: vendorObjectId,
       buyerId: buyerObjectId, // optional
-      buyerPhone,              // required for M-PESA payments
+      buyerPhone,             // required for M-PESA payments
       items: itemsWithObjectIds,
       amount,
       CheckoutRequestID,
-      status: "paid", // ✅ Changed from "pending" to "paid"
+      status: "paid", // status is "paid" because this is post-payment
     });
 
     console.log("✅ Order created successfully:", order);

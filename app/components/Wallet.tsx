@@ -2,24 +2,37 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
+interface VendorData {
+  success: boolean;
+  message?: string;
+  data?: {
+    totalSales?: number;
+    balance?: number;
+  };
+}
+
+interface WithdrawResponse {
+  success: boolean;
+  message?: string;
+}
+
 export default function Wallet() {
-  const [balance, setBalance] = useState(0);
-  const [totalSales, setTotalSales] = useState(0);
-  const [mpesa, setMpesa] = useState("");
-  const [amount, setAmount] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [balance, setBalance] = useState<number>(0);
+  const [totalSales, setTotalSales] = useState<number>(0);
+  const [mpesa, setMpesa] = useState<string>("");
+  const [amount, setAmount] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
 
   // Fetch vendor data including totalSales and balance
   useEffect(() => {
     const fetchVendor = async () => {
       try {
         const res = await fetch("/api/vendor/me", { credentials: "include" });
-        const data = await res.json();
+        const data: VendorData = await res.json();
 
-        if (res.ok && data.success) {
-          setTotalSales(data.data.totalSales || 0);
-          // Assuming vendor balance is in the subscription or add another field
-          setBalance(data.data.balance || 0);
+        if (res.ok && data.success && data.data) {
+          setTotalSales(data.data.totalSales ?? 0);
+          setBalance(data.data.balance ?? 0);
         } else {
           toast.error(data.message || "Failed to fetch wallet data");
         }
@@ -46,10 +59,11 @@ export default function Wallet() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount: finalAmount, mpesa_number: mpesa }),
       });
-      const data = await res.json();
+
+      const data: WithdrawResponse = await res.json();
       setLoading(false);
 
-      if (res.ok) {
+      if (res.ok && data.success) {
         toast.success(`Withdrawal successful! Ksh ${finalAmount.toFixed(2)} sent (3% fee applied)`);
         setBalance((prev) => prev - withdrawalAmount); // Deduct full requested amount
         setAmount("");

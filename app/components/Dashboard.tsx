@@ -4,13 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
-import {
-  Package,
-  CreditCard,
-  Settings,
-  BarChart,
-  Store,
-} from "lucide-react";
+import { Package, CreditCard, Settings, BarChart, Store } from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart as ReBarChart,
@@ -25,12 +19,36 @@ import Shop from "./Shop";
 import Order from "./Order";
 import Wallet from "./Wallet";
 
+// ----------------------
+// TYPES
+// ----------------------
+interface VendorProduct {
+  id: string;
+  name: string;
+}
+
+interface VendorOrder {
+  productId: string;
+}
+
+interface Vendor {
+  name: string;
+  products?: VendorProduct[];
+  orders?: VendorOrder[];
+  totalSales?: number;
+}
+
+interface Subscription {
+  trialActive?: boolean;
+  plan?: string;
+}
+
 export default function Dashboard() {
-  const [vendor, setVendor] = useState<any>(null);
+  const [vendor, setVendor] = useState<Vendor | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [subscription, setSubscription] = useState<any>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const router = useRouter();
 
   const handleMarketplaceRedirect = () => {
@@ -40,10 +58,9 @@ export default function Dashboard() {
 
   // Chart data for orders: number of orders per product
   const ordersChartData =
-    vendor?.products?.map((p: any) => {
-      const ordersCount = vendor.orders?.filter(
-        (o: any) => o.productId === p.id
-      ).length;
+    vendor?.products?.map((p) => {
+      const ordersCount = vendor.orders?.filter((o) => o.productId === p.id)
+        .length;
       return { name: p.name, orders: ordersCount || 0 };
     }) || [];
 
@@ -56,16 +73,16 @@ export default function Dashboard() {
 
         if (res.ok) {
           const data = await res.json();
-          setVendor(data.data);
+          setVendor(data.data as Vendor);
 
           const subRes = await fetch("/api/subscription/check", {
             credentials: "include",
           });
 
           const subData = await subRes.json();
-          setSubscription(subData);
+          setSubscription(subData as Subscription);
         }
-      } catch (err: any) {
+      } catch (err) {
         console.error("❌ Failed to load vendor or subscription data", err);
       } finally {
         setLoading(false);
@@ -91,7 +108,7 @@ export default function Dashboard() {
     );
   }
 
-  const sidebarButton = (icon: any, label: string, tab: string) => (
+  const sidebarButton = (icon: React.ReactNode, label: string, tab: string) => (
     <button
       onClick={() => {
         setActiveTab(tab);
@@ -121,7 +138,15 @@ export default function Dashboard() {
             animate={{ rotate: sidebarOpen ? 90 : 0 }}
             transition={{ duration: 0.2 }}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-6 h-6"
+            >
               <rect x="3" y="3" width="18" height="18" rx="4" />
               <path d="M9 3v18" />
             </svg>
@@ -264,6 +289,7 @@ export default function Dashboard() {
     </div>
   );
 }
+
 
 
 

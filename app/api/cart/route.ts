@@ -2,11 +2,21 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/app/lib/db";
 import Cart from "@/app/models/Cart";
-import MarketplaceProduct from "@/app/models/Product"; // ✅ Import your Product model
+import MarketplaceProduct from "@/app/models/Product"; 
 import { verifyToken } from "@/app/lib/auth";
 
+// ✅ CartItem interface
+interface CartItem {
+  productId: mongoose.Types.ObjectId | string;
+  vendorId: mongoose.Types.ObjectId | string;
+  name: string;
+  price: number;
+  image?: string;
+  quantity: number;
+}
+
 // Helper: get token from cookies
-async function getToken(req: Request) {
+async function getToken(req: Request): Promise<string | null> {
   const cookieHeader = req.headers.get("cookie") || "";
   return cookieHeader.split("token=")[1]?.split(";")[0] || null;
 }
@@ -19,12 +29,12 @@ export async function GET(req: Request) {
     const token = await getToken(req);
     if (!token) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const decoded: any = verifyToken(token);
+    const decoded = verifyToken(token) as { id: string } | null;
     if (!decoded) return NextResponse.json({ message: "Invalid token" }, { status: 401 });
 
     let cart = await Cart.findOne({ userId: decoded.id }).populate({
       path: "items.productId",
-      model: MarketplaceProduct, // ✅ Use the imported model explicitly
+      model: MarketplaceProduct,
       select: "name price vendor images",
       populate: { path: "vendor", select: "_id name" },
     });
@@ -34,9 +44,10 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json(cart);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET /api/cart error:", error);
-    return NextResponse.json({ message: "Failed to fetch cart", error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Failed to fetch cart";
+    return NextResponse.json({ message }, { status: 500 });
   }
 }
 
@@ -48,7 +59,7 @@ export async function POST(req: Request) {
     const token = await getToken(req);
     if (!token) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const decoded: any = verifyToken(token);
+    const decoded = verifyToken(token) as { id: string } | null;
     if (!decoded) return NextResponse.json({ message: "Invalid token" }, { status: 401 });
 
     const { productId, name, price, image, vendorId } = await req.json();
@@ -57,7 +68,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 });
     }
 
-    const cartItem = {
+    const cartItem: CartItem = {
       productId: new mongoose.Types.ObjectId(productId),
       vendorId: new mongoose.Types.ObjectId(vendorId),
       name,
@@ -76,7 +87,7 @@ export async function POST(req: Request) {
       });
     } else {
       const existingItem = cart.items.find(
-        (item: any) =>
+        (item: CartItem) =>
           item.productId.toString() === productId &&
           item.vendorId.toString() === vendorId
       );
@@ -88,7 +99,7 @@ export async function POST(req: Request) {
       }
 
       cart.totalPrice = cart.items.reduce(
-        (sum: number, item: any) => sum + item.price * item.quantity,
+        (sum: number, item: CartItem) => sum + item.price * item.quantity,
         0
       );
 
@@ -96,9 +107,10 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, cart });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("POST /api/cart error:", error);
-    return NextResponse.json({ message: "Failed to update cart", error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Failed to update cart";
+    return NextResponse.json({ message, error: message }, { status: 500 });
   }
 }
 
@@ -113,7 +125,7 @@ export async function DELETE(
     const token = await getToken(req);
     if (!token) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    const decoded: any = verifyToken(token);
+    const decoded = verifyToken(token) as { id: string } | null;
     if (!decoded) return NextResponse.json({ message: "Invalid token" }, { status: 401 });
 
     const { productId, vendorId } = params;
@@ -122,7 +134,7 @@ export async function DELETE(
     if (!cart) return NextResponse.json({ message: "Cart not found" }, { status: 404 });
 
     const itemIndex = cart.items.findIndex(
-      (item: any) =>
+      (item: CartItem) =>
         item.productId.toString() === productId &&
         item.vendorId.toString() === vendorId
     );
@@ -131,20 +143,21 @@ export async function DELETE(
 
     cart.items.splice(itemIndex, 1);
 
-    // Recalculate total price
     cart.totalPrice = cart.items.reduce(
-      (sum: number, item: any) => sum + item.price * item.quantity,
+      (sum: number, item: CartItem) => sum + item.price * item.quantity,
       0
     );
 
     await cart.save();
 
     return NextResponse.json({ success: true, message: "Item removed", cart });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("DELETE /api/cart error:", error);
-    return NextResponse.json({ message: "Failed to delete item", error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Failed to delete item";
+    return NextResponse.json({ message, error: message }, { status: 500 });
   }
 }
+
 
 
 

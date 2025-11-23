@@ -6,7 +6,7 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 import { JWT_SECRET } from "@/app/lib/auth";
 
 /**
- * Helper: Extract token from cookies
+ * Helper: Extract token safely
  */
 function getTokenFromRequest(req: Request): string | null {
   const cookieHeader = req.headers.get("cookie");
@@ -14,8 +14,8 @@ function getTokenFromRequest(req: Request): string | null {
 
   const cookies = Object.fromEntries(
     cookieHeader.split(";").map((c) => {
-      const [name, ...rest] = c.trim().split("=");
-      return [name, rest.join("=")];
+      const [key, ...rest] = c.trim().split("=");
+      return [key, rest.join("=")];
     })
   );
 
@@ -23,38 +23,48 @@ function getTokenFromRequest(req: Request): string | null {
 }
 
 /**
- * GET: Fetch shop for the authenticated vendor
+ * Helper: Ensure model is registered ONCE (Fix for Vercel)
  */
+function ensureMongooseModel(name: string, schema: mongoose.Schema) {
+  if (!mongoose.models[name]) {
+    mongoose.model(name, schema);
+  }
+}
+
 export async function GET(req: Request) {
   try {
     await connectDB();
 
+    // Fix Vercel multi-load issue
+    ensureMongooseModel("Shop", Shop.schema);
+
     const token = getTokenFromRequest(req);
     if (!token) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    // ✅ JWT_SECRET is guaranteed to be a string
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    const vendorId = decoded?.id;
-
-    if (!vendorId) {
-      return NextResponse.json(
-        { message: "Invalid token payload" },
-        { status: 401 }
-      );
+    let decoded: JwtPayload & { id?: string } = {};
+    try {
+      decoded = jwt.verify(token, JWT_SECRET as string) as JwtPayload & { id?: string };
+    } catch {
+      return NextResponse.json({ success: false, message: "Invalid token" }, { status: 401 });
     }
 
-    const vendorObjectId = new mongoose.Types.ObjectId(vendorId);
+    if (!decoded.id) {
+      return NextResponse.json({ success: false, message: "Invalid token payload" }, { status: 401 });
+    }
 
-    // ✅ Find or create shop for this user
+    const vendorObjectId = new mongoose.Types.ObjectId(decoded.id);
+
+    // Fetch shop
     let shop = await Shop.findOne({ owner: vendorObjectId });
 
+    // Auto-create shop if missing
     if (!shop) {
       shop = await Shop.create({
         name: "My Shop",
         contact: "0700000000",
-        link: `shop-${vendorId.toString().slice(-5)}`,
+        link: `shop-${decoded.id.slice(-5)}`,
         owner: vendorObjectId,
         theme: {
           primaryColor: "#1D4ED8",
@@ -63,61 +73,70 @@ export async function GET(req: Request) {
           layout: "classic",
         },
       });
-      console.log("✅ Default shop created for vendor:", vendorId);
     }
 
-    return NextResponse.json({ shop }, { status: 200 });
+    return NextResponse.json({ success: true, shop }, { status: 200 });
   } catch (err: any) {
-    console.error("GET /api/vendor/shop error:", err.message);
+    console.error("GET /api/vendor/shop error:", err);
     return NextResponse.json(
-      { message: "Internal server error", error: err.message },
+      { success: false, message: "Internal server error", error: err.message },
       { status: 500 }
     );
   }
 }
 
-/**
- * PUT: Update shop for authenticated vendor
- */
 export async function PUT(req: Request) {
   try {
     await connectDB();
 
+    // Fix Vercel multi-load issue
+    ensureMongooseModel("Shop", Shop.schema);
+
     const token = getTokenFromRequest(req);
     if (!token) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    // ✅ JWT_SECRET is guaranteed to be a string
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    const vendorId = decoded?.id;
-
-    if (!vendorId) {
-      return NextResponse.json(
-        { message: "Invalid token payload" },
-        { status: 401 }
-      );
+    let decoded: JwtPayload & { id?: string } = {};
+    try {
+      decoded = jwt.verify(token, JWT_SECRET as string) as JwtPayload & { id?: string };
+    } catch {
+      return NextResponse.json({ success: false, message: "Invalid token" }, { status: 401 });
     }
 
-    const vendorObjectId = new mongoose.Types.ObjectId(vendorId);
-    const { name, contact, logo, link, theme } = await req.json();
+    if (!decoded.id) {
+      return NextResponse.json({ success: false, message: "Invalid token payload" }, { status: 401 });
+    }
+
+    const vendorObjectId = new mongoose.Types.ObjectId(decoded.id);
+
+    // Safely read JSON body (Vercel requires casting)
+    const body = (await req.json()) as {
+      name?: string;
+      contact?: string;
+      logo?: string;
+      link?: string;
+      theme?: Record<string, any>;
+    };
+
+    const { name, contact, logo, link, theme } = body;
 
     if (!name || !contact || !link) {
       return NextResponse.json(
-        { message: "Name, contact, and link are required." },
+        { success: false, message: "Name, contact, and link are required." },
         { status: 400 }
       );
     }
 
-    // 🚫 Prevent duplicate shop link
-    const existing = await Shop.findOne({
+    // Prevent duplicate links
+    const existingLink = await Shop.findOne({
       link,
       owner: { $ne: vendorObjectId },
     });
 
-    if (existing) {
+    if (existingLink) {
       return NextResponse.json(
-        { message: "Shop link already taken." },
+        { success: false, message: "Shop link already taken." },
         { status: 400 }
       );
     }
@@ -137,14 +156,15 @@ export async function PUT(req: Request) {
       { new: true, upsert: true }
     );
 
-    return NextResponse.json({ shop: updatedShop }, { status: 200 });
+    return NextResponse.json({ success: true, shop: updatedShop }, { status: 200 });
   } catch (err: any) {
     console.error("PUT /api/vendor/shop error:", err);
     return NextResponse.json(
-      { message: "Failed to save shop", error: err.message },
+      { success: false, message: "Failed to save shop", error: err.message },
       { status: 500 }
     );
   }
 }
+
 
 

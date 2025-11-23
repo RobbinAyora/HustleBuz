@@ -2,21 +2,32 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/app/lib/db";
 import ShopCart from "@/app/models/ShopCart";
 import { verifyToken } from "@/app/lib/auth";
-import MarketplaceProduct from "@/app/models/Product"; 
+import MarketplaceProduct from "@/app/models/Product";
+import mongoose from "mongoose";
 
-async function getToken(req: Request) {
-  const cookieHeader = req.headers.get("cookie") || "";
-  return cookieHeader.split("token=")[1]?.split(";")[0] || null;
+// ✅ Type for cart item
+interface CartItem {
+  productId: mongoose.Types.ObjectId;
+  name: string;
+  price: number;
+  image: string;
+  quantity: number;
+  vendorId: mongoose.Types.ObjectId;
 }
 
-/**
- * ✅ GET: Fetch user's cart for a specific shop (with populated vendor info)
- */
+// ✅ Helper: extract token from cookies
+async function getToken(req: Request): Promise<string | null> {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const tokenCookie = cookieHeader.split("; ").find((c) => c.startsWith("token="));
+  return tokenCookie ? tokenCookie.split("=")[1] : null;
+}
+
+// GET: fetch user's cart for a shop
 export async function GET(
   req: Request,
-  context: { params: Promise<{ shopId: string }> }
+  context: { params: { shopId: string } } // ✅ params is an object
 ) {
-  const { shopId } = await context.params;
+  const { shopId } = context.params;
   await connectDB();
 
   const token = await getToken(req);
@@ -28,8 +39,8 @@ export async function GET(
   let cart = await ShopCart.findOne({ userId: decoded.id, shopId })
     .populate({
       path: "items.productId",
-      model: "MarketplaceProduct", // ✅ must match your product model name
-      select: "name price images vendor", // only return these fields
+      model: "MarketplaceProduct",
+      select: "name price images vendor",
     })
     .lean();
 
@@ -45,14 +56,12 @@ export async function GET(
   return NextResponse.json(cart);
 }
 
-/**
- * ✅ POST: Add item to the user's cart
- */
+// POST: add item to cart
 export async function POST(
   req: Request,
-  context: { params: Promise<{ shopId: string }> }
+  context: { params: { shopId: string } }
 ) {
-  const { shopId } = await context.params;
+  const { shopId } = context.params;
 
   try {
     await connectDB();
@@ -65,14 +74,13 @@ export async function POST(
 
     const { productId } = await req.json();
 
-    // ✅ Fetch product details including vendor
     const product = await MarketplaceProduct.findById(productId).select(
       "name price images vendor"
     );
-    if (!product)
-      return NextResponse.json({ message: "Product not found" }, { status: 404 });
+    if (!product) return NextResponse.json({ message: "Product not found" }, { status: 404 });
 
     const { name, price, images, vendor } = product;
+    const vendorObjId = new mongoose.Types.ObjectId(vendor);
 
     let cart = await ShopCart.findOne({ userId: decoded.id, shopId });
 
@@ -82,13 +90,13 @@ export async function POST(
         shopId,
         items: [
           {
-            productId,
+            productId: new mongoose.Types.ObjectId(productId),
             name,
             price,
             image: images?.[0] || "",
             quantity: 1,
-            vendorId: vendor, // ✅ added automatically
-          },
+            vendorId: vendorObjId,
+          } as CartItem,
         ],
         totalPrice: price,
       });
@@ -101,27 +109,24 @@ export async function POST(
         existingItem.quantity += 1;
       } else {
         cart.items.push({
-          productId,
+          productId: new mongoose.Types.ObjectId(productId),
           name,
           price,
           image: images?.[0] || "",
           quantity: 1,
-          vendorId: vendor, // ✅ added automatically
-        });
+          vendorId: vendorObjId,
+        } as CartItem);
       }
 
       cart.totalPrice = cart.items.reduce(
-        (sum: number, item: any) => sum + item.price * item.quantity,
+        (sum: number, item: CartItem) => sum + item.price * item.quantity,
         0
       );
 
       await cart.save();
     }
 
-    const updatedCart = await ShopCart.findOne({
-      userId: decoded.id,
-      shopId,
-    })
+    const updatedCart = await ShopCart.findOne({ userId: decoded.id, shopId })
       .populate({
         path: "items.productId",
         model: "MarketplaceProduct",
@@ -130,19 +135,19 @@ export async function POST(
       .lean();
 
     return NextResponse.json({ success: true, cart: updatedCart });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("POST /api/shop-cart error:", error);
-    return NextResponse.json({ message: "Failed to update cart" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ message: "Failed to update cart", error: message }, { status: 500 });
   }
 }
-/**
- * ✅ DELETE: Remove item or clear cart
- */
+
+// DELETE: remove item or clear cart
 export async function DELETE(
   req: Request,
-  context: { params: Promise<{ shopId: string }> }
+  context: { params: { shopId: string } }
 ) {
-  const { shopId } = await context.params;
+  const { shopId } = context.params;
 
   try {
     await connectDB();
@@ -168,16 +173,13 @@ export async function DELETE(
     );
 
     cart.totalPrice = cart.items.reduce(
-      (sum: number, item: any) => sum + item.price * item.quantity,
+      (sum: number, item: CartItem) => sum + item.price * item.quantity,
       0
     );
 
     await cart.save();
 
-    const updatedCart = await ShopCart.findOne({
-      userId: decoded.id,
-      shopId,
-    })
+    const updatedCart = await ShopCart.findOne({ userId: decoded.id, shopId })
       .populate({
         path: "items.productId",
         model: "MarketplaceProduct",
@@ -186,11 +188,13 @@ export async function DELETE(
       .lean();
 
     return NextResponse.json({ success: true, cart: updatedCart });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("DELETE /api/shop-cart error:", error);
-    return NextResponse.json({ message: "Failed to modify cart" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ message: "Failed to modify cart", error: message }, { status: 500 });
   }
 }
+
 
 
 

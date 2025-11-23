@@ -7,17 +7,19 @@ import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
 import toast, { Toaster } from "react-hot-toast";
 
+interface ShopTheme {
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  layout: "classic" | "modern" | "minimal";
+}
+
 interface Shop {
   name: string;
   contact: string;
   logo?: string;
   link?: string;
-  theme: {
-    primaryColor: string;
-    secondaryColor: string;
-    accentColor: string;
-    layout: "classic" | "modern" | "minimal";
-  };
+  theme: ShopTheme;
 }
 
 const DEFAULT_SHOP: Shop = {
@@ -35,10 +37,13 @@ const DEFAULT_SHOP: Shop = {
 
 export default function Shop() {
   const [shop, setShop] = useState<Shop>(DEFAULT_SHOP);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
 
-  const fullShopLink = shop.link ? `${window.location.origin}/shop/${shop.link}` : "";
+  const fullShopLink =
+    typeof window !== "undefined" && shop.link
+      ? `${window.location.origin}/shop/${shop.link}`
+      : "";
 
   // Fetch vendor shop
   useEffect(() => {
@@ -46,7 +51,7 @@ export default function Shop() {
       try {
         const res = await fetch(`/api/vendor/shop`, { credentials: "include" });
         if (!res.ok) throw new Error("Failed to fetch shop");
-        const data = await res.json();
+        const data: { shop?: Shop } = await res.json();
         const themeData = data.shop?.theme || DEFAULT_SHOP.theme;
 
         setShop({
@@ -103,7 +108,6 @@ export default function Shop() {
     }));
   };
 
-  // Save shop
   const handleSave = async () => {
     setSaving(true);
     toast.loading("Saving shop...", { id: "save" });
@@ -116,7 +120,7 @@ export default function Shop() {
         body: JSON.stringify(shop),
       });
 
-      const data = await res.json();
+      const data: { shop?: Shop; message?: string } = await res.json();
       if (!res.ok) throw new Error(data.message || "Save failed");
 
       setShop((prev) => ({
@@ -185,7 +189,10 @@ export default function Shop() {
 
         {!loading && (
           <>
-            <label htmlFor="logo-upload" className="cursor-pointer text-blue-600 hover:underline">
+            <label
+              htmlFor="logo-upload"
+              className="cursor-pointer text-blue-600 hover:underline"
+            >
               Upload Logo
             </label>
             <input
@@ -264,7 +271,9 @@ export default function Shop() {
               className="w-12 h-12 cursor-pointer border-none p-0"
             />
 
-            <span className="text-gray-700 font-semibold">{shop.theme.primaryColor}</span>
+            <span className="text-gray-700 font-semibold">
+              {shop.theme.primaryColor}
+            </span>
           </div>
         )}
       </div>
@@ -297,6 +306,7 @@ export default function Shop() {
     </motion.div>
   );
 }
+
 
 
 

@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/app/lib/db";
 import Shop from "@/app/models/Shop";
 
-export async function GET(req: Request, context: { params: Promise<{ link: string }> }) {
+// GET shop by link
+export async function GET(
+  req: Request,
+  context: { params: { link: string } } // ✅ params is an object, not a Promise
+) {
   try {
-    // ✅ Await params before using it
-    const { link } = await context.params;
+    const { link } = context.params; // no need to await
 
     await connectDB();
 
@@ -19,11 +22,10 @@ export async function GET(req: Request, context: { params: Promise<{ link: strin
     }
 
     return NextResponse.json({ shop }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching shop:", error);
-    return NextResponse.json(
-      { message: "Server error", error: error.message },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ message: "Server error", error: message }, { status: 500 });
   }
 }
+
