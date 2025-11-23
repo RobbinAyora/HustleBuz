@@ -129,7 +129,7 @@ export async function DELETE(
     if (!decoded) return NextResponse.json({ message: "Invalid token" }, { status: 401 });
 
     const { productId, vendorId } = params;
-    let cart = await Cart.findOne({ userId: decoded.id });
+    const cart = await Cart.findOne({ userId: decoded.id }); // ✅ use const
 
     if (!cart) return NextResponse.json({ message: "Cart not found" }, { status: 404 });
 
@@ -157,6 +157,8 @@ export async function DELETE(
     return NextResponse.json({ message, error: message }, { status: 500 });
   }
 }
+
+
 
 
 
