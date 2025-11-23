@@ -2,10 +2,10 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { ShoppingBag, Package, Store } from "lucide-react";
-import React, { useEffect, useState } from "react"; // Removed unused searchRef
+import React, { useEffect, useState } from "react"; // Removed unused refs
 import toast from "react-hot-toast";
 import Link from "next/link";
-import Image from "next/image"; // ✅ Import next/image
+import Image from "next/image"; // ✅ Use next/image
 
 interface Shop {
   _id: string;
@@ -38,12 +38,11 @@ export default function ShopPage() {
   const [shop, setShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState<{ [key: string]: boolean }>({});
   const [cartCount, setCartCount] = useState(0);
 
-  // 🟢 Fetch shop + products
+  // Fetch shop + products
   useEffect(() => {
     if (!shopLink) return;
 
@@ -71,7 +70,6 @@ export default function ShopPage() {
         setProducts(productList);
         setFilteredProducts(productList);
       } catch (err: unknown) {
-        // ✅ Proper typing instead of any
         const errorMessage =
           err instanceof Error ? err.message : "Failed to load shop or products";
         toast.error(errorMessage);
@@ -83,21 +81,7 @@ export default function ShopPage() {
     fetchShopAndProducts();
   }, [shopLink]);
 
-  // 🟢 Search filter
-  useEffect(() => {
-    const query = searchQuery.toLowerCase();
-    const filtered = products.filter((p) => {
-      const nameMatch = p.name.toLowerCase().includes(query);
-      const descMatch = p.description?.toLowerCase().includes(query);
-      const categoryMatch = p.categories?.some((c) =>
-        c.toLowerCase().includes(query)
-      );
-      return nameMatch || descMatch || categoryMatch;
-    });
-    setFilteredProducts(filtered);
-  }, [searchQuery, products]);
-
-  // 🟢 Add to cart (cookie-based)
+  // Add to cart
   const handleAddToCart = async (productId: string) => {
     if (!shop) return;
 
@@ -270,6 +254,7 @@ export default function ShopPage() {
     </div>
   );
 }
+
 
 
 

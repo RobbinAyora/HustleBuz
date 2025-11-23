@@ -9,7 +9,7 @@ export interface IPayment extends Document {
   phoneNumber: string;
   status: "Pending" | "Completed" | "Failed";
   transactionDate?: Date;
-  rawResponse?: any;
+  rawResponse?: Record<string, unknown>; // ✅ fixed type
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,10 +27,11 @@ const PaymentSchema = new Schema<IPayment>(
       default: "Pending",
     },
     transactionDate: { type: Date },
-    rawResponse: { type: Schema.Types.Mixed },
+    rawResponse: { type: Schema.Types.Mixed }, // keeps Mongo flexibility
   },
   { timestamps: true }
 );
 
 export default mongoose.models.Payment ||
   mongoose.model<IPayment>("Payment", PaymentSchema, "payments");
+
