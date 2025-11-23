@@ -1,11 +1,15 @@
 import Login from "../components/Login";
+import { Suspense } from "react";
 
 
 
 export default function LoginRoute() {
   return (
     <main>
-       <Login />
+      <Suspense fallback={<div>Loading...</div>}>
+        <Login />
+        </Suspense>
+   
     </main>
   );
 }
