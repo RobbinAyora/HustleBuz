@@ -4,12 +4,12 @@ import Order from "@/app/models/Order";
 import User from "@/app/models/User";
 import { verifyToken } from "@/app/lib/auth";
 import { cookies } from "next/headers";
-import mongoose from "mongoose";
 import MarketplaceProduct from "@/app/models/Product";
+import mongoose from "mongoose";
 
 // ✅ Define local type for Order items
 interface OrderItem {
-  productId: mongoose.Types.ObjectId | string;
+  productId: mongoose.Types.ObjectId | string | null;
   vendor: mongoose.Types.ObjectId | string;
   quantity: number;
   price: number;
@@ -41,10 +41,6 @@ export async function GET() {
       return NextResponse.json({ message: "Access denied" }, { status: 403 });
     }
 
-    if (!mongoose.models.Product) {
-      mongoose.model("Product", MarketplaceProduct.schema);
-    }
-
     const vendor = await User.findById(decoded.id).select("-password");
     if (!vendor) {
       return NextResponse.json({ message: "Vendor not found" }, { status: 404 });
@@ -53,11 +49,15 @@ export async function GET() {
     // Fetch all orders that include this vendor’s items
     const ordersRaw = await Order.find({ "items.vendor": vendor._id })
       .populate("buyerId", "name email")
-      .populate("items.productId", "name price images")
+      .populate({
+        path: "items.productId",
+        model: "MarketplaceProduct", // ✅ Correct model name
+        select: "name price images",
+      })
       .sort({ createdAt: -1 })
       .lean();
 
-    // ✅ Map raw orders to OrderType safely
+    // Map raw orders safely
     const orders: OrderType[] = ordersRaw.map((order: any) => ({
       _id: order._id,
       buyerId: order.buyerId
@@ -65,7 +65,7 @@ export async function GET() {
         : null,
       buyerPhone: order.buyerPhone || "",
       items: (order.items || []).map((item: any) => ({
-        productId: item.productId._id || item.productId,
+        productId: item.productId?._id || item.productId || null, // ✅ Safe access
         vendor: item.vendor,
         quantity: item.quantity,
         price: item.price,

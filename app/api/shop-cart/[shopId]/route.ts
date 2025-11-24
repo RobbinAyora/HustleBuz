@@ -25,9 +25,9 @@ async function getToken(req: Request): Promise<string | null> {
 // GET: fetch user's cart for a shop
 export async function GET(
   req: Request,
-  context: { params: { shopId: string } } // ✅ params is an object
+  context: { params:  { shopId: string } }
 ) {
-  const { shopId } = context.params;
+  const { shopId } = await context.params;
   await connectDB();
 
   const token = await getToken(req);
@@ -147,7 +147,7 @@ export async function DELETE(
   req: Request,
   context: { params: { shopId: string } }
 ) {
-  const { shopId } = context.params;
+  const { shopId } = await context.params;
 
   try {
     await connectDB();
@@ -168,10 +168,22 @@ export async function DELETE(
       return NextResponse.json({ message: "Cart cleared" });
     }
 
-    cart.items = cart.items.filter(
-      (item: any) => item.productId.toString() !== productId
-    );
+    // ✅ Remove the item safely regardless of population
+    cart.items = cart.items.filter((item: any) => {
+      const id =
+        typeof item.productId === "string"
+          ? item.productId
+          : item.productId._id?.toString();
+      return id !== productId;
+    });
 
+    // Ensure all items have vendorId before saving
+    cart.items = cart.items.map((item: any) => ({
+      ...item,
+      vendorId: item.vendorId || new mongoose.Types.ObjectId(),
+    }));
+
+    // Recalculate total price
     cart.totalPrice = cart.items.reduce(
       (sum: number, item: CartItem) => sum + item.price * item.quantity,
       0
@@ -179,6 +191,7 @@ export async function DELETE(
 
     await cart.save();
 
+    // Populate again to return the updated cart
     const updatedCart = await ShopCart.findOne({ userId: decoded.id, shopId })
       .populate({
         path: "items.productId",
@@ -194,6 +207,7 @@ export async function DELETE(
     return NextResponse.json({ message: "Failed to modify cart", error: message }, { status: 500 });
   }
 }
+
 
 
 

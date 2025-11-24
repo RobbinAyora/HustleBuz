@@ -8,7 +8,7 @@ export async function GET(
   context: { params: { link: string } } // ✅ params is an object, not a Promise
 ) {
   try {
-    const { link } = context.params; // no need to await
+    const { link } = await context.params; // no need to await
 
     await connectDB();
 

@@ -187,20 +187,21 @@ export default function ShopPage() {
               <div
                 key={product._id}
                 className="rounded-2xl shadow-lg p-6 flex flex-col transition hover:shadow-xl hover:-translate-y-1 bg-white"
-                style={{ border: `1px solid ${primaryColor}30` }}
+                style={{ border: `1px solid ${primaryColor}30`, height: "440px" }} // ✅ fixed card height
               >
                 <Link href={`/product/${product._id}`}>
                   {product.images?.[0] ? (
-                    <Image
-                      src={product.images[0]}
-                      alt={product.name}
-                      width={400}
-                      height={160}
-                      className="object-cover rounded-lg mb-4"
-                    />
+                    <div className="h-32 w-full relative mb-4"> {/* ✅ fixed image container */}
+                      <Image
+                        src={product.images[0]}
+                        alt={product.name}
+                        fill
+                        className="object-cover rounded-lg"
+                      />
+                    </div>
                   ) : (
                     <div
-                      className="h-40 w-full flex items-center justify-center rounded-lg border mb-4"
+                      className="h-32 w-full flex items-center justify-center rounded-lg border mb-4"
                       style={{ backgroundColor: `${primaryColor}15` }}
                     >
                       <Package
@@ -232,7 +233,7 @@ export default function ShopPage() {
                 <button
                   onClick={() => handleAddToCart(product._id)}
                   disabled={adding[product._id]}
-                  className="mt-4 w-full text-white py-2 rounded-xl font-semibold hover:opacity-90 transition"
+                  className="mt-auto w-full text-white py-2 rounded-xl font-semibold hover:opacity-90 transition"
                   style={{ backgroundColor: primaryColor }}
                 >
                   {adding[product._id] ? "Adding..." : "Add to Cart"}
@@ -254,6 +255,7 @@ export default function ShopPage() {
     </div>
   );
 }
+
 
 
 
